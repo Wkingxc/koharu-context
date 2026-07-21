@@ -33,7 +33,9 @@ export const useJobsStore = create<JobsState>()(
     setSnapshot: (jobs) =>
       set((s) => {
         s.jobs = {}
-        for (const j of jobs) s.jobs[j.id] = j
+        for (const j of jobs) {
+          s.jobs[j.id] = { ...j, progress: j.progress ?? undefined }
+        }
       }),
     started: (id, kind) =>
       set((s) => {

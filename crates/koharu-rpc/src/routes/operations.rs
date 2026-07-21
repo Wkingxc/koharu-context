@@ -75,6 +75,7 @@ async fn cancel_operation(
     if let Some(flag) = cancels().get(&id) {
         flag.store(true, Ordering::Relaxed);
     }
+    crate::routes::chapter_translations::cancel_pending_batch_review(&id);
     // Best-effort download cancel: drop the registry row.
     app.downloads().remove(&id);
     Ok(StatusCode::NO_CONTENT)

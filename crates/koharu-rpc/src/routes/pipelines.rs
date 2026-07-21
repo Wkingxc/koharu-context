@@ -101,6 +101,7 @@ async fn start_pipeline(
             kind: "pipeline".to_string(),
             status: JobStatus::Running,
             error: None,
+            progress: None,
         },
     );
     app.bus.publish(AppEvent::JobStarted {
@@ -130,6 +131,16 @@ async fn start_pipeline(
             current_step_index: tick.step_index,
             total_steps: tick.total_steps,
             overall_percent: tick.overall_percent,
+            chapter_phase: None,
+            current_batch: None,
+            total_batches: None,
+            awaiting_batch_review: false,
+            batch_summary: None,
+            batch_summaries: None,
+            chapter_total_pages: None,
+            prepared_pages: None,
+            translated_pages: None,
+            rendered_pages: None,
         }));
     });
     let warning_bus = app.bus.clone();
@@ -179,6 +190,7 @@ async fn start_pipeline(
                 kind: "pipeline".to_string(),
                 status,
                 error: error.clone(),
+                progress: None,
             },
         );
         app_c.bus.publish(AppEvent::JobFinished(JobFinishedEvent {

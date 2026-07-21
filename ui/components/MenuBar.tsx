@@ -2,6 +2,7 @@
 
 import { CopyIcon, MinusIcon, SquareIcon, XIcon } from 'lucide-react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -413,6 +414,17 @@ export function MenuBar() {
             </MenubarSub>
           </MenubarContent>
         </MenubarMenu>
+        <Link
+          href={hasScene ? '/chapter-translation' : '#'}
+          data-testid='menu-chapter-translation'
+          aria-disabled={!hasScene}
+          onClick={(event) => {
+            if (!hasScene) event.preventDefault()
+          }}
+          className='rounded px-3 py-1.5 font-medium hover:bg-accent aria-disabled:pointer-events-none aria-disabled:opacity-50'
+        >
+          {t('menu.chapterTranslation')}
+        </Link>
         <MenubarMenu>
           <MenubarTrigger className='rounded px-3 py-1.5 font-medium hover:bg-accent data-[state=open]:bg-accent'>
             {t('menu.help')}

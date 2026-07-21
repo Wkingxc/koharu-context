@@ -35,10 +35,14 @@ beforeEach(() => {
 })
 
 describe('MenuBar', () => {
-  it('renders File / View / Process / Help triggers', async () => {
+  it('renders the chapter translation entry beside the top-level menus', async () => {
     renderWithQuery(<MenuBar />)
     expect(screen.getByTestId('menu-file-trigger')).toBeInTheDocument()
     expect(screen.getByTestId('menu-process-trigger')).toBeInTheDocument()
+    expect(screen.getByTestId('menu-chapter-translation')).toHaveAttribute(
+      'href',
+      '/chapter-translation',
+    )
   })
 
   it('Close Project calls DELETE /projects/current and invalidates scene', async () => {

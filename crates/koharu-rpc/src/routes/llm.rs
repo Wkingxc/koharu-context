@@ -39,7 +39,12 @@ async fn put_current_llm(
 ) -> ApiResult<axum::http::StatusCode> {
     let provider_config = match req.target.kind {
         LlmTargetKind::Provider => req.target.provider_id.as_deref().map(|pid| {
-            koharu_app::llm::provider_config_from_settings(&app.config.load(), &app.runtime, pid)
+            koharu_app::llm::provider_config_from_settings(
+                &app.config.load(),
+                &app.runtime,
+                pid,
+                req.options.as_ref(),
+            )
         }),
         LlmTargetKind::Local => None,
     };

@@ -107,6 +107,19 @@ pub trait AnyProvider: Send + Sync {
         model: &'a str,
         custom_system_prompt: Option<&'a str>,
     ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>>;
+
+    /// Generate with the exact supplied system prompt. Conversational API
+    /// providers override this so structured callers are not given the
+    /// tagged-block translation suffix used by the legacy pipeline.
+    fn generate<'a>(
+        &'a self,
+        source: &'a str,
+        target_language: Language,
+        model: &'a str,
+        system_prompt: &'a str,
+    ) -> Pin<Box<dyn Future<Output = anyhow::Result<String>> + Send + 'a>> {
+        self.translate(source, target_language, model, Some(system_prompt))
+    }
 }
 
 #[derive(Clone)]
@@ -515,6 +528,7 @@ fn build_openai_provider(config: ProviderConfig) -> anyhow::Result<Box<dyn AnyPr
     Ok(Box::new(openai::OpenAiProvider {
         http_client: Arc::clone(&config.http_client),
         api_key: required_api_key(&config, "openai")?,
+        max_tokens: config.max_tokens,
     }))
 }
 
@@ -522,6 +536,7 @@ fn build_gemini_provider(config: ProviderConfig) -> anyhow::Result<Box<dyn AnyPr
     Ok(Box::new(gemini::GeminiProvider {
         http_client: Arc::clone(&config.http_client),
         api_key: required_api_key(&config, "gemini")?,
+        max_tokens: config.max_tokens,
     }))
 }
 
@@ -529,6 +544,7 @@ fn build_claude_provider(config: ProviderConfig) -> anyhow::Result<Box<dyn AnyPr
     Ok(Box::new(claude::ClaudeProvider {
         http_client: Arc::clone(&config.http_client),
         api_key: required_api_key(&config, "claude")?,
+        max_tokens: config.max_tokens,
     }))
 }
 
@@ -536,6 +552,7 @@ fn build_deepseek_provider(config: ProviderConfig) -> anyhow::Result<Box<dyn Any
     Ok(Box::new(deepseek::DeepSeekProvider {
         http_client: Arc::clone(&config.http_client),
         api_key: required_api_key(&config, "deepseek")?,
+        max_tokens: config.max_tokens,
     }))
 }
 

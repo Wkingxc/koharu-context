@@ -9,6 +9,7 @@ pub mod archive;
 pub mod autosave;
 pub mod blobs;
 pub mod bus;
+pub mod chapter_translation;
 pub mod config;
 pub mod google_fonts;
 pub mod history;

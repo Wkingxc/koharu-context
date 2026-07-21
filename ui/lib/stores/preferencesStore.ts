@@ -15,6 +15,8 @@ type PreferencesState = {
   setDefaultFont: (font?: string) => void
   favoriteFonts: string[]
   toggleFavoriteFont: (font: string) => void
+  favoriteModels: string[]
+  toggleFavoriteModel: (model: string) => void
   customSystemPrompt?: string
   setCustomSystemPrompt: (prompt?: string) => void
   codexImagePrompt?: string
@@ -51,6 +53,7 @@ const initialPreferences = {
     color: '#ffffff',
   },
   favoriteFonts: [],
+  favoriteModels: [],
   shortcuts: {
     select: 'V',
     block: 'M',
@@ -92,6 +95,12 @@ export const usePreferencesStore = create<PreferencesState>()(
             ? state.favoriteFonts.filter((f) => f !== font)
             : [...state.favoriteFonts, font],
         })),
+      toggleFavoriteModel: (model) =>
+        set((state) => ({
+          favoriteModels: state.favoriteModels.includes(model)
+            ? state.favoriteModels.filter((item) => item !== model)
+            : [...state.favoriteModels, model],
+        })),
       setCustomSystemPrompt: (prompt) => set({ customSystemPrompt: prompt }),
       setCodexImagePrompt: (prompt) => set({ codexImagePrompt: prompt }),
       setCodexImageModel: (model) => set({ codexImageModel: model }),
@@ -119,7 +128,7 @@ export const usePreferencesStore = create<PreferencesState>()(
     }),
     {
       name: 'koharu-config',
-      version: 7,
+      version: 8,
       migrate: (persisted: any, version: number) => {
         if (version < 2 && persisted) {
           delete persisted.localLlm
@@ -154,12 +163,16 @@ export const usePreferencesStore = create<PreferencesState>()(
         if (persisted && (version < 7 || persisted.customPipeline?.detect === undefined)) {
           persisted.customPipeline = initialPreferences.customPipeline
         }
+        if (persisted && version < 8) {
+          persisted.favoriteModels ??= initialPreferences.favoriteModels
+        }
         return persisted
       },
       partialize: (state) => ({
         brushConfig: state.brushConfig,
         defaultFont: state.defaultFont,
         favoriteFonts: state.favoriteFonts,
+        favoriteModels: state.favoriteModels,
         customSystemPrompt: state.customSystemPrompt,
         codexImagePrompt: state.codexImagePrompt,
         codexImageModel: state.codexImageModel,

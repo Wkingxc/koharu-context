@@ -3,6 +3,7 @@
 //! `api.rs`.
 
 pub mod ai;
+pub mod chapter_translations;
 pub mod config;
 pub mod downloads;
 pub mod fonts;

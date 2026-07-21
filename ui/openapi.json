@@ -100,6 +100,92 @@
         }
       }
     },
+    "/chapter-translations": {
+      "post": {
+        "operationId": "start_chapter_translation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartChapterTranslationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartChapterTranslationResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chapter-translations/{id}/continue": {
+      "post": {
+        "operationId": "continue_chapter_translation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Chapter operation id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContinueChapterTranslationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        }
+      }
+    },
+    "/chapter-translations/{id}/retry": {
+      "post": {
+        "operationId": "retry_chapter_translation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Failed chapter operation id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartChapterTranslationResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/config": {
       "get": {
         "operationId": "get_config",
@@ -996,7 +1082,7 @@
               }
             ],
             "default": {
-              "path": "C:\\Users\\Mayo\\AppData\\Local\\Koharu"
+              "path": "/Users/bytedance/Library/Application Support/Koharu"
             }
           },
           "http": {
@@ -1022,7 +1108,7 @@
               "detector": "pp-doclayout-v3",
               "font_detector": "yuzumarker-font-detection",
               "inpainter": "lama-manga",
-              "ocr": "paddle-ocr-vl-1.5",
+              "ocr": "paddle-ocr-vl-1.6",
               "renderer": "koharu-renderer",
               "segmenter": "comic-text-detector-seg",
               "translator": "llm"
@@ -1204,6 +1290,10 @@
         "type": "string",
         "description": "Hex-encoded blake3 hash of an immutable blob."
       },
+      "ChapterTranslationPhase": {
+        "type": "string",
+        "enum": ["preparing", "translating", "post_processing"]
+      },
       "CodexAuthAttemptStatus": {
         "type": "string",
         "enum": ["pending", "succeeded", "failed"]
@@ -1346,6 +1436,15 @@
               "$ref": "#/components/schemas/ProviderPatch"
             },
             "description": "If present, replaces the entire list. Api_key values of `\"[REDACTED]\"`\nare interpreted as \"leave the existing secret alone\"."
+          }
+        }
+      },
+      "ContinueChapterTranslationRequest": {
+        "type": "object",
+        "required": ["summary"],
+        "properties": {
+          "summary": {
+            "type": "string"
           }
         }
       },
@@ -1871,6 +1970,16 @@
           },
           "kind": {
             "type": "string"
+          },
+          "progress": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PipelineProgress"
+              }
+            ]
           },
           "status": {
             "$ref": "#/components/schemas/JobStatus"
@@ -2596,7 +2705,7 @@
           },
           "ocr": {
             "type": "string",
-            "default": "paddle-ocr-vl-1.5"
+            "default": "paddle-ocr-vl-1.6"
           },
           "renderer": {
             "type": "string",
@@ -2653,6 +2762,38 @@
           "overallPercent"
         ],
         "properties": {
+          "awaitingBatchReview": {
+            "type": "boolean"
+          },
+          "batchSummaries": {
+            "type": ["array", "null"],
+            "items": {
+              "type": "string"
+            },
+            "description": "Confirmed summaries from previous batches followed by the current\ngenerated summary while awaiting review."
+          },
+          "batchSummary": {
+            "type": ["string", "null"]
+          },
+          "chapterPhase": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ChapterTranslationPhase"
+              }
+            ]
+          },
+          "chapterTotalPages": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "currentBatch": {
+            "type": ["integer", "null"],
+            "description": "One-based batch number for chapter translation jobs.",
+            "minimum": 0
+          },
           "currentPage": {
             "type": "integer",
             "minimum": 0
@@ -2669,6 +2810,14 @@
             "format": "int32",
             "minimum": 0
           },
+          "preparedPages": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "renderedPages": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
           "status": {
             "$ref": "#/components/schemas/PipelineStatus"
           },
@@ -2682,12 +2831,20 @@
               }
             ]
           },
+          "totalBatches": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
           "totalPages": {
             "type": "integer",
             "minimum": 0
           },
           "totalSteps": {
             "type": "integer",
+            "minimum": 0
+          },
+          "translatedPages": {
+            "type": ["integer", "null"],
             "minimum": 0
           }
         }
@@ -2949,6 +3106,42 @@
             "items": {
               "$ref": "#/components/schemas/JobSummary"
             }
+          }
+        }
+      },
+      "StartChapterTranslationRequest": {
+        "type": "object",
+        "required": ["target", "targetLanguage", "maxTokens"],
+        "properties": {
+          "batchSize": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "brief": {
+            "type": ["string", "null"]
+          },
+          "defaultFont": {
+            "type": ["string", "null"]
+          },
+          "maxTokens": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "target": {
+            "$ref": "#/components/schemas/LlmTarget"
+          },
+          "targetLanguage": {
+            "type": "string"
+          }
+        }
+      },
+      "StartChapterTranslationResponse": {
+        "type": "object",
+        "required": ["operationId"],
+        "properties": {
+          "operationId": {
+            "type": "string"
           }
         }
       },

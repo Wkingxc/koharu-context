@@ -1,7 +1,7 @@
 'use client'
 
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { CheckIcon, ChevronDownIcon, SearchIcon } from 'lucide-react'
+import { CheckIcon, ChevronDownIcon, SearchIcon, StarIcon } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -28,6 +28,10 @@ type LlmModelSelectProps = {
   placeholder?: string
   className?: string
   triggerClassName?: string
+  favoriteKeys?: string[]
+  favoriteLabel?: string
+  unfavoriteLabel?: string
+  onToggleFavorite?: (key: string) => void
   onChange: (key: string) => void
   'data-testid'?: string
 }
@@ -50,21 +54,32 @@ export function LlmModelSelect({
   const [search, setSearch] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const favoriteSet = useMemo(() => new Set(props.favoriteKeys ?? []), [props.favoriteKeys])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return options
-    return options.filter(({ model, provider }) => {
-      const fields = [
-        model.name,
-        model.target.modelId,
-        model.target.providerId,
-        provider?.name,
-        provider?.id,
-      ]
-      return fields.some((x) => x?.toLowerCase().includes(q))
-    })
-  }, [options, search])
+    const matching = q
+      ? options.filter(({ model, provider }) => {
+          const fields = [
+            model.name,
+            model.target.modelId,
+            model.target.providerId,
+            provider?.name,
+            provider?.id,
+          ]
+          return fields.some((x) => x?.toLowerCase().includes(q))
+        })
+      : options
+    return matching
+      .map((option, index) => ({ option, index }))
+      .sort((a, b) => {
+        const favoriteOrder =
+          Number(favoriteSet.has(getKey(b.option))) - Number(favoriteSet.has(getKey(a.option)))
+        return favoriteOrder || a.index - b.index
+      })
+      .map(({ option }) => option)
+  }, [favoriteSet, getKey, options, search])
+  const listHeight = Math.min(Math.max(filtered.length, 1), MAX_VISIBLE) * ITEM_HEIGHT
 
   const virtualizer = useVirtualizer({
     count: filtered.length,
@@ -72,6 +87,7 @@ export function LlmModelSelect({
     estimateSize: () => ITEM_HEIGHT,
     overscan: 4,
     enabled: open,
+    initialRect: { width: 256, height: listHeight },
   })
 
   const viewportRef = useCallback(
@@ -84,8 +100,16 @@ export function LlmModelSelect({
   )
 
   const selected = useMemo(() => options.find((o) => getKey(o) === value), [options, value, getKey])
-
-  const listHeight = Math.min(Math.max(filtered.length, 1), MAX_VISIBLE) * ITEM_HEIGHT
+  const visibleItems =
+    filtered.length <= MAX_VISIBLE
+      ? filtered.map((option, index) => ({
+          key: getKey(option),
+          index,
+          start: index * ITEM_HEIGHT,
+        }))
+      : virtualizer.getVirtualItems()
+  const totalListHeight =
+    filtered.length <= MAX_VISIBLE ? filtered.length * ITEM_HEIGHT : virtualizer.getTotalSize()
 
   return (
     <Popover
@@ -103,7 +127,11 @@ export function LlmModelSelect({
           triggerClassName,
         )}
       >
-        <TriggerLabel selected={selected} placeholder={placeholder} />
+        <TriggerLabel
+          selected={selected}
+          placeholder={placeholder}
+          favorite={selected ? favoriteSet.has(getKey(selected)) : false}
+        />
         <ChevronDownIcon className='size-3.5 shrink-0 opacity-60' />
       </PopoverTrigger>
       <PopoverContent
@@ -132,11 +160,11 @@ export function LlmModelSelect({
         <ScrollArea className='relative' style={{ height: listHeight }} viewportRef={viewportRef}>
           <div
             style={{
-              height: virtualizer.getTotalSize(),
+              height: totalListHeight,
               position: 'relative',
             }}
           >
-            {virtualizer.getVirtualItems().map((vi) => {
+            {visibleItems.map((vi) => {
               const option = filtered[vi.index]
               const key = getKey(option)
               const isSelected = key === value
@@ -145,12 +173,18 @@ export function LlmModelSelect({
                   key={vi.key}
                   option={option}
                   selected={isSelected}
+                  favorite={favoriteSet.has(key)}
                   style={{ height: ITEM_HEIGHT, top: vi.start }}
                   onClick={() => {
                     onChange(key)
                     setOpen(false)
                     setSearch('')
                   }}
+                  favoriteLabel={props.favoriteLabel}
+                  unfavoriteLabel={props.unfavoriteLabel}
+                  onToggleFavorite={
+                    props.onToggleFavorite ? () => props.onToggleFavorite?.(key) : undefined
+                  }
                 />
               )
             })}
@@ -184,9 +218,11 @@ function providerBadgeLabel(provider: LlmProviderCatalog): string {
 function TriggerLabel({
   selected,
   placeholder,
+  favorite,
 }: {
   selected: LlmModelOption | undefined
   placeholder: string | undefined
+  favorite: boolean
 }) {
   if (!selected) {
     return (
@@ -198,6 +234,7 @@ function TriggerLabel({
     <span className='flex min-w-0 items-center gap-1.5' title={model.name}>
       {provider && <ProviderBadge label={providerBadgeLabel(provider)} />}
       <span className='truncate'>{shortModelName(model.name)}</span>
+      {favorite ? <StarIcon className='size-3 shrink-0 fill-amber-400 text-amber-500' /> : null}
     </span>
   )
 }
@@ -205,34 +242,70 @@ function TriggerLabel({
 function ModelRow({
   option,
   selected,
+  favorite,
   style,
   onClick,
+  favoriteLabel,
+  unfavoriteLabel,
+  onToggleFavorite,
 }: {
   option: LlmModelOption
   selected: boolean
+  favorite: boolean
   style: React.CSSProperties
   onClick: () => void
+  favoriteLabel?: string
+  unfavoriteLabel?: string
+  onToggleFavorite?: () => void
 }) {
   const { model, provider } = option
   return (
-    <button
-      type='button'
+    <div
+      role='option'
+      aria-selected={selected}
+      tabIndex={0}
       title={model.name}
       className={cn(
-        'absolute left-0 flex w-full cursor-default items-center gap-1.5 px-2 pr-7 text-left text-xs transition-colors select-none',
+        'absolute left-0 flex w-full cursor-default items-center gap-1.5 px-2 text-left text-xs transition-colors select-none',
         selected
           ? 'bg-accent text-accent-foreground ring-1 ring-primary/30 ring-inset'
           : 'hover:bg-accent/60 hover:text-accent-foreground',
       )}
       style={style}
       onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onClick()
+        }
+      }}
     >
+      <span className='flex size-3 shrink-0 items-center justify-center'>
+        {selected ? <CheckIcon className='size-3 text-primary' /> : null}
+      </span>
       {provider && <ProviderBadge label={providerBadgeLabel(provider)} />}
-      <span className='truncate'>{shortModelName(model.name)}</span>
-      {selected && (
-        <CheckIcon className='absolute top-1/2 right-2 size-3 -translate-y-1/2 text-primary' />
-      )}
-    </button>
+      <span className='min-w-0 flex-1 truncate'>{shortModelName(model.name)}</span>
+      {onToggleFavorite ? (
+        <button
+          type='button'
+          aria-label={`${favorite ? (unfavoriteLabel ?? 'Remove favorite') : (favoriteLabel ?? 'Favorite model')} ${model.name}`}
+          title={
+            favorite ? (unfavoriteLabel ?? 'Remove favorite') : (favoriteLabel ?? 'Favorite model')
+          }
+          className={cn(
+            'flex size-6 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted-foreground/10 focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none',
+            favorite ? 'text-amber-500' : 'text-muted-foreground/40 hover:text-muted-foreground',
+          )}
+          onClick={(event) => {
+            event.stopPropagation()
+            onToggleFavorite()
+          }}
+        >
+          <StarIcon className={cn('size-3.5', favorite && 'fill-current')} />
+        </button>
+      ) : null}
+    </div>
   )
 }
 

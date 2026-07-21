@@ -74,6 +74,14 @@ pub enum PipelineStep {
     Render,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ChapterTranslationPhase {
+    Preparing,
+    Translating,
+    PostProcessing,
+}
+
 impl PipelineStep {
     pub const ALL: &[PipelineStep] = &[
         PipelineStep::Detect,
@@ -104,6 +112,29 @@ pub struct PipelineProgress {
     pub current_step_index: usize,
     pub total_steps: usize,
     pub overall_percent: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chapter_phase: Option<ChapterTranslationPhase>,
+    /// One-based batch number for chapter translation jobs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_batch: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub total_batches: Option<usize>,
+    #[serde(default)]
+    pub awaiting_batch_review: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub batch_summary: Option<String>,
+    /// Confirmed summaries from previous batches followed by the current
+    /// generated summary while awaiting review.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub batch_summaries: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chapter_total_pages: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prepared_pages: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translated_pages: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rendered_pages: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema, ToSchema)]
@@ -124,6 +155,8 @@ pub struct JobSummary {
     pub status: JobStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<PipelineProgress>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ToSchema)]
@@ -229,6 +262,16 @@ mod tests {
             current_step_index: 2,
             total_steps: 5,
             overall_percent: 40,
+            chapter_phase: None,
+            current_batch: None,
+            total_batches: None,
+            awaiting_batch_review: false,
+            batch_summary: None,
+            batch_summaries: Some(vec!["batch 1".to_string(), "batch 2".to_string()]),
+            chapter_total_pages: Some(3),
+            prepared_pages: Some(3),
+            translated_pages: Some(1),
+            rendered_pages: Some(0),
         };
         let encoded = serde_json::to_string(&value).expect("serialize");
         let _: PipelineProgress = serde_json::from_str(&encoded).expect("deserialize");

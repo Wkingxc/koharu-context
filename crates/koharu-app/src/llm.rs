@@ -15,8 +15,8 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use koharu_core::{
-    LlmCatalog, LlmCatalogModel, LlmLoadRequest, LlmProviderCatalog, LlmProviderCatalogStatus,
-    LlmState, LlmStateStatus, LlmTarget, LlmTargetKind,
+    LlmCatalog, LlmCatalogModel, LlmGenerationOptions, LlmLoadRequest, LlmProviderCatalog,
+    LlmProviderCatalogStatus, LlmState, LlmStateStatus, LlmTarget, LlmTargetKind,
 };
 use koharu_llm::providers::{
     AnyProvider, ProviderCatalogModels, ProviderConfig, ProviderDescriptor,
@@ -214,27 +214,9 @@ impl Model {
             .and_then(Language::parse)
             .unwrap_or(Language::English);
         let body = format_sources(sources);
-
-        let mut guard = self.state.write().await;
-        let translation = match &mut *guard {
-            State::ReadyLocal(llm) => {
-                let opts = llm.id().default_generate_options();
-                llm.generate(&body, &opts, target_language, custom_system_prompt)
-            }
-            State::ReadyProvider { target, provider } => {
-                provider
-                    .translate(
-                        &body,
-                        target_language,
-                        &target.model_id,
-                        custom_system_prompt,
-                    )
-                    .await
-            }
-            State::Loading { .. } => Err(anyhow::anyhow!("LLM is still loading")),
-            State::Failed { error, .. } => Err(anyhow::anyhow!("LLM failed to load: {error}")),
-            State::Empty => Err(anyhow::anyhow!("no LLM loaded")),
-        }?;
+        let translation = self
+            .generate_translation_text(&body, target_language, custom_system_prompt)
+            .await?;
 
         let translation = strip_thinking_block(&translation);
         let out = match parse_tagged_blocks(translation, sources.len())? {
@@ -245,6 +227,64 @@ impl Model {
             .into_iter()
             .map(|s| strip_wrapping_quotes(s.trim()))
             .collect())
+    }
+
+    async fn generate_translation_text(
+        &self,
+        body: &str,
+        target_language: Language,
+        custom_system_prompt: Option<&str>,
+    ) -> Result<String> {
+        let mut guard = self.state.write().await;
+        match &mut *guard {
+            State::ReadyLocal(llm) => {
+                let opts = llm.id().default_generate_options();
+                llm.generate(body, &opts, target_language, custom_system_prompt)
+            }
+            State::ReadyProvider { target, provider } => {
+                provider
+                    .translate(
+                        body,
+                        target_language,
+                        &target.model_id,
+                        custom_system_prompt,
+                    )
+                    .await
+            }
+            State::Loading { .. } => Err(anyhow::anyhow!("LLM is still loading")),
+            State::Failed { error, .. } => Err(anyhow::anyhow!("LLM failed to load: {error}")),
+            State::Empty => Err(anyhow::anyhow!("no LLM loaded")),
+        }
+    }
+
+    /// Generate one raw response without applying the legacy tagged-block
+    /// parser. Chapter translation uses this to enforce its own JSON contract.
+    pub async fn generate_text(
+        &self,
+        body: &str,
+        target_language: Language,
+        custom_system_prompt: Option<&str>,
+    ) -> Result<String> {
+        let mut guard = self.state.write().await;
+        match &mut *guard {
+            State::ReadyLocal(llm) => {
+                let opts = llm.id().default_generate_options();
+                llm.generate(body, &opts, target_language, custom_system_prompt)
+            }
+            State::ReadyProvider { target, provider } => {
+                provider
+                    .generate(
+                        body,
+                        target_language,
+                        &target.model_id,
+                        custom_system_prompt.unwrap_or_default(),
+                    )
+                    .await
+            }
+            State::Loading { .. } => Err(anyhow::anyhow!("LLM is still loading")),
+            State::Failed { error, .. } => Err(anyhow::anyhow!("LLM failed to load: {error}")),
+            State::Empty => Err(anyhow::anyhow!("no LLM loaded")),
+        }
     }
 }
 
@@ -419,6 +459,7 @@ pub fn provider_config_from_settings(
     config: &crate::config::AppConfig,
     runtime: &RuntimeManager,
     provider_id: &str,
+    options: Option<&LlmGenerationOptions>,
 ) -> ProviderConfig {
     let stored = config.providers.iter().find(|p| p.id == provider_id);
     ProviderConfig {
@@ -427,8 +468,8 @@ pub fn provider_config_from_settings(
             .and_then(|p| p.api_key.as_ref())
             .map(|s| s.expose().to_owned()),
         base_url: stored.and_then(|p| p.base_url.clone()),
-        temperature: None,
-        max_tokens: None,
+        temperature: options.and_then(|options| options.temperature),
+        max_tokens: options.and_then(|options| options.max_tokens),
     }
 }
 

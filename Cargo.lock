@@ -4415,6 +4415,7 @@ dependencies = [
  "insta",
  "koharu-app",
  "koharu-core",
+ "koharu-llm",
  "koharu-psd",
  "koharu-runtime",
  "natord",

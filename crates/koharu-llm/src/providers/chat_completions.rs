@@ -37,25 +37,30 @@ struct ChatRequest<'a> {
     max_tokens: Option<u32>,
 }
 
-pub async fn send_chat_completion(
-    http_client: Arc<ClientWithMiddleware>,
-    request: ChatCompletionsRequest,
-) -> anyhow::Result<String> {
-    let body = ChatRequest {
+fn serialize_request_body(request: &ChatCompletionsRequest) -> anyhow::Result<Vec<u8>> {
+    serde_json::to_vec(&ChatRequest {
         model: &request.model,
         messages: vec![
             ChatMessage {
                 role: "system",
-                content: request.system_prompt,
+                content: request.system_prompt.clone(),
             },
             ChatMessage {
                 role: "user",
-                content: request.user_prompt,
+                content: request.user_prompt.clone(),
             },
         ],
         temperature: request.temperature,
         max_tokens: request.max_tokens,
-    };
+    })
+    .map_err(Into::into)
+}
+
+pub async fn send_chat_completion(
+    http_client: Arc<ClientWithMiddleware>,
+    request: ChatCompletionsRequest,
+) -> anyhow::Result<String> {
+    let body = serialize_request_body(&request)?;
 
     let mut http_request = http_client.post(&request.endpoint);
     if let ChatCompletionsAuth::Bearer(api_key) = request.auth {
@@ -64,7 +69,7 @@ pub async fn send_chat_completion(
 
     let response = http_request
         .header("content-type", "application/json")
-        .body(serde_json::to_vec(&body)?)
+        .body(body)
         .send()
         .await?;
 
@@ -77,4 +82,35 @@ pub async fn send_chat_completion(
         .as_str()
         .map(ToOwned::to_owned)
         .ok_or_else(|| anyhow::anyhow!("{} returned no content", request.provider))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn serializes_optional_max_tokens() {
+        let request = ChatCompletionsRequest {
+            provider: "test",
+            endpoint: "https://example.test/chat".to_string(),
+            auth: ChatCompletionsAuth::None,
+            model: "model".to_string(),
+            system_prompt: "system".to_string(),
+            user_prompt: "user".to_string(),
+            temperature: None,
+            max_tokens: Some(1234),
+        };
+
+        let body: serde_json::Value =
+            serde_json::from_slice(&serialize_request_body(&request).unwrap()).unwrap();
+        assert_eq!(body["max_tokens"], 1234);
+
+        let request = ChatCompletionsRequest {
+            max_tokens: None,
+            ..request
+        };
+        let body: serde_json::Value =
+            serde_json::from_slice(&serialize_request_body(&request).unwrap()).unwrap();
+        assert!(body.get("max_tokens").is_none());
+    }
 }

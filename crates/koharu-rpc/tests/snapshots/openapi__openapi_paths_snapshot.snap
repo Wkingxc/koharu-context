@@ -34,6 +34,24 @@ expression: paths
         ],
     ),
     (
+        "/chapter-translations",
+        [
+            "post",
+        ],
+    ),
+    (
+        "/chapter-translations/{id}/continue",
+        [
+            "post",
+        ],
+    ),
+    (
+        "/chapter-translations/{id}/retry",
+        [
+            "post",
+        ],
+    ),
+    (
         "/config",
         [
             "get",
