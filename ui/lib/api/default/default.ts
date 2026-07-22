@@ -53,6 +53,7 @@ import type {
   PutMaskParams,
   PutMaskResponse,
   ReadingOrder,
+  RetryChapterTranslationRequest,
   SceneSnapshot,
   StartChapterTranslationRequest,
   StartChapterTranslationResponse,
@@ -653,11 +654,14 @@ export const getRetryChapterTranslationUrl = (id: string) => {
 
 export const retryChapterTranslation = async (
   id: string,
+  retryChapterTranslationRequest: RetryChapterTranslationRequest,
   options?: RequestInit,
 ): Promise<StartChapterTranslationResponse> => {
   return fetchApi<StartChapterTranslationResponse>(getRetryChapterTranslationUrl(id), {
     ...options,
     method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(retryChapterTranslationRequest),
   })
 }
 
@@ -668,14 +672,14 @@ export const getRetryChapterTranslationMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof retryChapterTranslation>>,
     TError,
-    { id: string },
+    { id: string; data: RetryChapterTranslationRequest },
     TContext
   >
   request?: SecondParameter<typeof fetchApi>
 }): UseMutationOptions<
   Awaited<ReturnType<typeof retryChapterTranslation>>,
   TError,
-  { id: string },
+  { id: string; data: RetryChapterTranslationRequest },
   TContext
 > => {
   const mutationKey = ['retryChapterTranslation']
@@ -687,11 +691,11 @@ export const getRetryChapterTranslationMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof retryChapterTranslation>>,
-    { id: string }
+    { id: string; data: RetryChapterTranslationRequest }
   > = (props) => {
-    const { id } = props ?? {}
+    const { id, data } = props ?? {}
 
-    return retryChapterTranslation(id, requestOptions)
+    return retryChapterTranslation(id, data, requestOptions)
   }
 
   return { mutationFn, ...mutationOptions }
@@ -700,7 +704,7 @@ export const getRetryChapterTranslationMutationOptions = <
 export type RetryChapterTranslationMutationResult = NonNullable<
   Awaited<ReturnType<typeof retryChapterTranslation>>
 >
-
+export type RetryChapterTranslationMutationBody = RetryChapterTranslationRequest
 export type RetryChapterTranslationMutationError = unknown
 
 export const useRetryChapterTranslation = <TError = unknown, TContext = unknown>(
@@ -708,7 +712,7 @@ export const useRetryChapterTranslation = <TError = unknown, TContext = unknown>
     mutation?: UseMutationOptions<
       Awaited<ReturnType<typeof retryChapterTranslation>>,
       TError,
-      { id: string },
+      { id: string; data: RetryChapterTranslationRequest },
       TContext
     >
     request?: SecondParameter<typeof fetchApi>
@@ -717,7 +721,7 @@ export const useRetryChapterTranslation = <TError = unknown, TContext = unknown>
 ): UseMutationResult<
   Awaited<ReturnType<typeof retryChapterTranslation>>,
   TError,
-  { id: string },
+  { id: string; data: RetryChapterTranslationRequest },
   TContext
 > => {
   return useMutation(getRetryChapterTranslationMutationOptions(options), queryClient)

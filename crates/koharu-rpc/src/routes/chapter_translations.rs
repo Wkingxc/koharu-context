@@ -17,10 +17,9 @@ use koharu_app::chapter_translation::{
 use koharu_app::pipeline::{self, Artifact, PipelineRunOptions, PipelineSpec, Scope};
 use koharu_core::{
     AppEvent, ChapterTranslationPhase, JobFinishedEvent, JobStatus, JobSummary, JobWarningEvent,
-    LlmGenerationOptions, LlmLoadRequest, LlmTarget, LlmTargetKind, PipelineProgress,
-    PipelineStatus, PipelineStep,
+    LlmGenerationOptions, LlmTarget, LlmTargetKind, PipelineProgress, PipelineStatus, PipelineStep,
 };
-use koharu_llm::Language;
+use koharu_llm::{Language, providers::build_provider};
 use serde::{Deserialize, Serialize};
 use tokio::sync::oneshot;
 use utoipa_axum::{router::OpenApiRouter, routes};
@@ -185,6 +184,13 @@ pub struct ContinueChapterTranslationRequest {
     pub summary: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RetryChapterTranslationRequest {
+    pub target: LlmTarget,
+    pub max_tokens: u32,
+}
+
 #[utoipa::path(
     post,
     path = "/chapter-translations",
@@ -220,15 +226,23 @@ async fn start_chapter_translation(
     post,
     path = "/chapter-translations/{id}/retry",
     params(("id" = String, Path, description = "Failed chapter operation id")),
+    request_body = RetryChapterTranslationRequest,
     responses((status = 200, body = StartChapterTranslationResponse))
 )]
 async fn retry_chapter_translation(
     State(app): State<AppState>,
     Path(id): Path<String>,
+    Json(req): Json<RetryChapterTranslationRequest>,
 ) -> ApiResult<Json<StartChapterTranslationResponse>> {
-    let (_, checkpoint) = retry_checkpoints()
+    let (_, mut checkpoint) = retry_checkpoints()
         .remove(&id)
         .ok_or_else(|| ApiError::bad_request("chapter operation has no retry checkpoint"))?;
+    checkpoint.request.target = req.target;
+    checkpoint.request.max_tokens = req.max_tokens;
+    if let Err(error) = validate_request(&checkpoint.request) {
+        retry_checkpoints().insert(id, checkpoint);
+        return Err(ApiError::bad_request(format!("{error:#}")));
+    }
     let session = app
         .current_session()
         .ok_or_else(|| ApiError::bad_request("no project open"))?;
@@ -412,15 +426,17 @@ async fn run_chapter_translation(
         provider_id,
         Some(&options),
     );
-    app.llm
-        .load_from_request(
-            LlmLoadRequest {
-                target: req.target.clone(),
-                options: Some(options),
-            },
-            Some(provider_config),
-        )
-        .await?;
+    // Chapter translation must stay bound to the target captured by this
+    // operation. The editor's shared LLM can be changed independently (for
+    // example by loading a processing profile), so using it here could send a
+    // later batch to an unrelated model.
+    let provider = build_provider(provider_id, provider_config)?;
+    tracing::info!(
+        operation_id,
+        provider_id,
+        model_id = %req.target.model_id,
+        "chapter translation provider ready"
+    );
 
     let language = Language::parse(&req.target_language).expect("validated language");
     let batching = req.batch_size.is_some();
@@ -466,9 +482,13 @@ async fn run_chapter_translation(
         let mut generated_summary = None;
         if !units.is_empty() {
             let user_request = build_user_request(&units, &context_summaries)?;
-            let raw = app
-                .llm
-                .generate_text(&user_request, language, Some(&system_prompt))
+            let raw = provider
+                .generate(
+                    &user_request,
+                    language,
+                    &req.target.model_id,
+                    &system_prompt,
+                )
                 .await
                 .with_context(|| format!("batch {batch_number} LLM request failed"))?;
             let validated = parse_response(&raw, &units, batching)

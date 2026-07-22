@@ -103,6 +103,8 @@ describe('ChapterTranslationPage', () => {
     const start = await screen.findByTestId('chapter-start')
     expect(requests).toHaveLength(0)
 
+    await userEvent.click(screen.getByTestId('chapter-model'))
+    await userEvent.click(await screen.findByTitle('GPT Pro'))
     await userEvent.type(screen.getByTestId('chapter-brief'), 'Use the official glossary.')
     await userEvent.click(screen.getByTestId('chapter-batching'))
     const batchSize = await screen.findByTestId('chapter-batch-size')
@@ -112,7 +114,7 @@ describe('ChapterTranslationPage', () => {
 
     await waitFor(() => expect(requests).toHaveLength(1))
     expect(requests[0]).toMatchObject({
-      target: { kind: 'provider', providerId: 'openai', modelId: 'gpt-test' },
+      target: { kind: 'provider', providerId: 'openai', modelId: 'gpt-pro' },
       targetLanguage: 'zh-CN',
       maxTokens: 32000,
       batchSize: 25,
@@ -305,20 +307,33 @@ describe('ChapterTranslationPage', () => {
   })
 
   it('retries a failed batch through its preserved backend checkpoint', async () => {
-    let retried = 0
+    const retries: unknown[] = []
     server.use(
-      http.post('/api/v1/chapter-translations/failed-op/retry', () => {
-        retried += 1
+      http.post('/api/v1/chapter-translations/failed-op/retry', async ({ request }) => {
+        retries.push(await request.json())
         return HttpResponse.json({ operationId: 'retry-op' })
       }),
     )
-    useChapterTranslationStore.setState({ operationId: 'failed-op', startedPageCount: 2 })
+    useChapterTranslationStore.setState({
+      providerId: 'openai',
+      target: { kind: 'provider', providerId: 'openai', modelId: 'gpt-pro' },
+      maxTokens: 12345,
+      operationId: 'failed-op',
+      startedPageCount: 2,
+    })
     useJobsStore.getState().started('failed-op', 'chapter-translation')
     useJobsStore.getState().finished('failed-op', 'failed', 'batch 2 response validation failed')
 
     renderWithQuery(<ChapterTranslationPage />)
     await userEvent.click(await screen.findByTestId('chapter-retry-batch'))
-    await waitFor(() => expect(retried).toBe(1))
+    await waitFor(() =>
+      expect(retries).toEqual([
+        {
+          target: { kind: 'provider', providerId: 'openai', modelId: 'gpt-pro' },
+          maxTokens: 12345,
+        },
+      ]),
+    )
     expect(useChapterTranslationStore.getState().operationId).toBe('retry-op')
     expect(useJobsStore.getState().jobs['retry-op']?.status).toBe('running')
   })

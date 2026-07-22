@@ -172,6 +172,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryChapterTranslationRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "",
@@ -3053,6 +3063,20 @@
             "type": "integer",
             "format": "int32",
             "minimum": 0
+          }
+        }
+      },
+      "RetryChapterTranslationRequest": {
+        "type": "object",
+        "required": ["target", "maxTokens"],
+        "properties": {
+          "maxTokens": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "target": {
+            "$ref": "#/components/schemas/LlmTarget"
           }
         }
       },

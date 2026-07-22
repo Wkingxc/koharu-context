@@ -162,11 +162,14 @@ export default function ChapterTranslationPage() {
   }
 
   const retryCurrentBatch = async () => {
-    if (!form.operationId || isRunning) return
+    if (!form.operationId || !form.target || isRunning) return
     setStarting(true)
     setStartError(undefined)
     try {
-      const response = await retryChapterTranslation(form.operationId)
+      const response = await retryChapterTranslation(form.operationId, {
+        target: form.target,
+        maxTokens: form.maxTokens,
+      })
       form.started(response.operationId, form.startedPageCount ?? pageCount)
       useJobsStore.getState().started(response.operationId, 'chapter-translation')
     } catch (error) {

@@ -167,7 +167,7 @@ pub fn parse_response(
     expected: &[TranslationUnit],
     require_batch_summary: bool,
 ) -> Result<ValidatedBatch> {
-    let json = strip_json_fence(raw)?;
+    let json = strip_model_wrappers(raw)?;
     let response: BatchResponse =
         serde_json::from_str(json).context("LLM response is not valid contract JSON")?;
     let expected_ids: HashSet<&str> = expected.iter().map(|unit| unit.id.as_str()).collect();
@@ -200,6 +200,32 @@ pub fn parse_response(
         translations,
         batch_summary,
     })
+}
+
+fn strip_model_wrappers(raw: &str) -> Result<&str> {
+    let mut trimmed = raw.trim().trim_start_matches('\u{feff}').trim_start();
+    if trimmed.is_empty() {
+        bail!(
+            "LLM response is empty; the model may have exhausted maxTokens before emitting the final JSON"
+        );
+    }
+
+    // Some reasoning models expose their chain of thought in `content` instead
+    // of a separate API field. Accept that well-known wrapper, but keep
+    // rejecting arbitrary prose around the JSON contract.
+    if let Some(reasoning) = trimmed.strip_prefix("<think>") {
+        let Some((_, response)) = reasoning.split_once("</think>") else {
+            bail!(
+                "LLM reasoning was truncated before the final JSON; increase maxTokens or reduce the batch size"
+            );
+        };
+        trimmed = response.trim();
+        if trimmed.is_empty() {
+            bail!("LLM returned reasoning but no final JSON response");
+        }
+    }
+
+    strip_json_fence(trimmed)
 }
 
 fn strip_json_fence(raw: &str) -> Result<&str> {
@@ -377,6 +403,33 @@ mod tests {
         })
         .to_string();
         assert!(parse_response(&extra_context, &expected, false).is_err());
+    }
+
+    #[test]
+    fn accepts_deepseek_reasoning_before_the_contract_json() {
+        let expected = [unit("a")];
+        let response = valid_response(&["a"], Some("保持称谓一致"));
+        let wrapped = format!("<think>核对角色称谓和上下文。</think>\n```json\n{response}\n```");
+
+        let parsed = parse_response(&wrapped, &expected, true).unwrap();
+
+        assert_eq!(parsed.translations, vec!["translated-a"]);
+        assert_eq!(parsed.batch_summary.as_deref(), Some("保持称谓一致"));
+    }
+
+    #[test]
+    fn explains_empty_or_truncated_reasoning_responses() {
+        let expected = [unit("a")];
+
+        let empty = parse_response(" \n\t", &expected, false)
+            .unwrap_err()
+            .to_string();
+        assert!(empty.contains("response is empty"));
+
+        let truncated = parse_response("<think>still reasoning", &expected, false)
+            .unwrap_err()
+            .to_string();
+        assert!(truncated.contains("reasoning was truncated"));
     }
 
     #[test]

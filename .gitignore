@@ -57,3 +57,6 @@ site/
 
 # integration-tests shared runtime cache
 .cache/
+
+# 工作目录
+down_data/
