@@ -230,7 +230,7 @@
     },
     "/config/providers/{id}/secret": {
       "put": {
-        "summary": "Save (or overwrite) the keyring secret for a provider. Creates the\nprovider entry in `config.providers` if it didn't exist. `PUT` because\nsetting the secret is idempotent for the same body.",
+        "summary": "Save (or overwrite) the local secret for a provider. Creates the\nprovider entry in `config.providers` if it didn't exist. `PUT` because\nsetting the secret is idempotent for the same body.",
         "operationId": "set_provider_secret",
         "parameters": [
           {
@@ -260,7 +260,7 @@
         }
       },
       "delete": {
-        "summary": "Clear a provider's keyring secret. The provider entry itself is kept.",
+        "summary": "Clear a provider's local secret. The provider entry itself is kept.",
         "operationId": "clear_provider_secret",
         "parameters": [
           {
@@ -2979,7 +2979,7 @@
         "properties": {
           "api_key": {
             "type": ["string", "null"],
-            "description": "Populated from credential storage on `load()`, never written to config.toml.\nSerializes as `\"[REDACTED]\"` in API responses."
+            "description": "Populated from the local provider secrets file on `load()`, never written to config.toml.\nSerializes as `\"[REDACTED]\"` in API responses."
           },
           "base_url": {
             "type": ["string", "null"]
@@ -2995,7 +2995,7 @@
         "properties": {
           "apiKey": {
             "type": ["string", "null"],
-            "description": "`\"[REDACTED]\"` → keep existing keyring secret; empty → clear; otherwise save."
+            "description": "`\"[REDACTED]\"` → keep existing local secret; empty → clear; otherwise save."
           },
           "baseUrl": {
             "type": ["string", "null"]

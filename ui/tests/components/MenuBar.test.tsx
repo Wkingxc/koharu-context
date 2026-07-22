@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MenuBar } from '@/components/MenuBar'
 import { getGetConfigQueryKey, getGetSceneJsonQueryKey } from '@/lib/api/default/default'
 import { queryClient } from '@/lib/queryClient'
+import { useProcessingProfileStore } from '@/lib/stores/processingProfileStore'
 
 import { renderWithQuery } from '../helpers'
 import { server } from '../msw/server'
@@ -17,6 +18,8 @@ vi.mock('@/lib/io/openFiles', () => ({
 }))
 
 beforeEach(() => {
+  window.localStorage.clear()
+  useProcessingProfileStore.setState({ profiles: [], activeProfileId: undefined })
   // Default: config + scene exist so the menu enables scene-dependent items.
   server.use(
     http.get('/api/v1/scene.json', () =>
@@ -39,6 +42,7 @@ describe('MenuBar', () => {
     renderWithQuery(<MenuBar />)
     expect(screen.getByTestId('menu-file-trigger')).toBeInTheDocument()
     expect(screen.getByTestId('menu-process-trigger')).toBeInTheDocument()
+    expect(screen.getByTestId('menu-profiles-trigger')).toBeInTheDocument()
     expect(screen.getByTestId('menu-chapter-translation')).toHaveAttribute(
       'href',
       '/chapter-translation',
@@ -65,6 +69,31 @@ describe('MenuBar', () => {
       const invalidatedKeys = invalidateSpy.mock.calls.map((c) => c[0]?.queryKey)
       expect(invalidatedKeys).toContainEqual(getGetSceneJsonQueryKey())
     })
+  })
+
+  it('saves the current processing configuration from the top-level profile menu', async () => {
+    server.use(
+      http.get('/api/v1/config', () =>
+        HttpResponse.json({ pipeline: { detector: 'detector-a', ocr: 'ocr-a' } }),
+      ),
+      http.get('/api/v1/llm/current', () =>
+        HttpResponse.json({
+          status: 'ready',
+          target: { kind: 'provider', providerId: 'openai', modelId: 'gpt-test' },
+        }),
+      ),
+    )
+
+    renderWithQuery(<MenuBar />)
+    await userEvent.click(screen.getByTestId('menu-profiles-trigger'))
+    await userEvent.click(await screen.findByTestId('menu-profile-save'))
+    await userEvent.type(screen.getByTestId('profile-name-input'), '黑白漫画')
+    await userEvent.click(screen.getByTestId('profile-save-confirm'))
+
+    await waitFor(() =>
+      expect(useProcessingProfileStore.getState().profiles[0]?.name).toBe('黑白漫画'),
+    )
+    expect(useProcessingProfileStore.getState().profiles[0]?.pipeline.ocr).toBe('ocr-a')
   })
 
   it('Close Project is disabled when no project is open', async () => {

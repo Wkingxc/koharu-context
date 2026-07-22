@@ -5,7 +5,7 @@
 
 export interface ProviderPatch {
   /**
-   * `"[REDACTED]"` → keep existing keyring secret; empty → clear; otherwise save.
+   * `"[REDACTED]"` → keep existing local secret; empty → clear; otherwise save.
    * @nullable
    */
   apiKey?: string | null

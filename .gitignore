@@ -35,6 +35,7 @@ target/
 # model checkpoints
 /models
 .env
+provider-api-keys.toml
 
 # Python
 .venv/

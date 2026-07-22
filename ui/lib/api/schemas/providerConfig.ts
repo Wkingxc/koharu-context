@@ -5,7 +5,7 @@
 
 export interface ProviderConfig {
   /**
-   * Populated from credential storage on `load()`, never written to config.toml.
+   * Populated from the local provider secrets file on `load()`, never written to config.toml.
    * Serializes as `"[REDACTED]"` in API responses.
    * @nullable
    */

@@ -892,7 +892,7 @@ export const getSetProviderSecretUrl = (id: string) => {
 }
 
 /**
- * @summary Save (or overwrite) the keyring secret for a provider. Creates the
+ * @summary Save (or overwrite) the local secret for a provider. Creates the
 provider entry in `config.providers` if it didn't exist. `PUT` because
 setting the secret is idempotent for the same body.
  */
@@ -952,7 +952,7 @@ export type SetProviderSecretMutationBody = ProviderSecretRequest
 export type SetProviderSecretMutationError = unknown
 
 /**
- * @summary Save (or overwrite) the keyring secret for a provider. Creates the
+ * @summary Save (or overwrite) the local secret for a provider. Creates the
 provider entry in `config.providers` if it didn't exist. `PUT` because
 setting the secret is idempotent for the same body.
  */
@@ -980,7 +980,7 @@ export const getClearProviderSecretUrl = (id: string) => {
 }
 
 /**
- * @summary Clear a provider's keyring secret. The provider entry itself is kept.
+ * @summary Clear a provider's local secret. The provider entry itself is kept.
  */
 export const clearProviderSecret = async (id: string, options?: RequestInit): Promise<void> => {
   return fetchApi<void>(getClearProviderSecretUrl(id), {
@@ -1032,7 +1032,7 @@ export type ClearProviderSecretMutationResult = NonNullable<
 export type ClearProviderSecretMutationError = unknown
 
 /**
- * @summary Clear a provider's keyring secret. The provider entry itself is kept.
+ * @summary Clear a provider's local secret. The provider entry itself is kept.
  */
 export const useClearProviderSecret = <TError = unknown, TContext = unknown>(
   options?: {

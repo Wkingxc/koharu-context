@@ -322,4 +322,21 @@ describe('ChapterTranslationPage', () => {
     expect(useChapterTranslationStore.getState().operationId).toBe('retry-op')
     expect(useJobsStore.getState().jobs['retry-op']?.status).toBe('running')
   })
+
+  it('offers a return-to-editor action when page preparation leaves empty OCR blocks', async () => {
+    useChapterTranslationStore.setState({ operationId: 'ocr-failed', startedPageCount: 118 })
+    useJobsStore.getState().started('ocr-failed', 'chapter-translation')
+    useJobsStore
+      .getState()
+      .finished(
+        'ocr-failed',
+        'failed',
+        'OCR output is still missing after preparation: page 118 "118.png" (text blocks: 1)',
+      )
+
+    renderWithQuery(<ChapterTranslationPage />)
+
+    expect(await screen.findByText(/page 118/)).toBeInTheDocument()
+    expect(screen.getByTestId('chapter-return-after-failure')).toHaveAttribute('href', '/')
+  })
 })

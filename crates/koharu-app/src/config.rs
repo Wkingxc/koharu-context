@@ -1,18 +1,20 @@
+use std::collections::BTreeMap;
 use std::fs;
+use std::io::Write;
 
 use anyhow::{Context, Result};
+use atomicwrites::{AtomicFile, OverwriteBehavior};
 use camino::Utf8PathBuf;
 use koharu_runtime::default_app_data_root;
-use koharu_secrets::SecretStore;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use utoipa::ToSchema;
 
 use crate::pipeline::{Artifact, Registry};
 
 const CONFIG_FILE: &str = "config.toml";
+const PROVIDER_SECRETS_DIR: &str = "secrets";
+const PROVIDER_SECRETS_FILE: &str = "provider-api-keys.toml";
 const REDACTED: &str = "[REDACTED]";
-const SECRET_SERVICE: &str = "koharu";
-const PROVIDER_API_KEY_SECRET_PREFIX: &str = "llm_provider_api_key_";
 
 // ---------------------------------------------------------------------------
 // RedactedSecret
@@ -115,7 +117,7 @@ pub struct ProviderConfig {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
-    /// Populated from credential storage on `load()`, never written to config.toml.
+    /// Populated from the local provider secrets file on `load()`, never written to config.toml.
     /// Serializes as `"[REDACTED]"` in API responses.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<String>)]
@@ -164,11 +166,20 @@ pub fn load() -> Result<AppConfig> {
         save(&config)?;
     }
 
-    // Populate api_key from credential storage for every known provider.
-    let secrets = SecretStore::new(SECRET_SERVICE);
+    // A serialized `[REDACTED]` marker is never a usable secret. Real values
+    // live only in the data directory's provider secrets file.
     for provider in &mut config.providers {
-        if let Ok(Some(key)) = secrets.get(&provider_api_key_secret_key(&provider.id))
-            && !key.trim().is_empty()
+        provider.api_key = None;
+    }
+    let secrets = load_provider_secrets(&config.data.path).unwrap_or_else(|error| {
+        tracing::warn!(%error, "failed to load local provider secrets; continuing without API keys");
+        ProviderSecrets::default()
+    });
+    for provider in &mut config.providers {
+        if let Some(key) = secrets
+            .api_keys
+            .get(&provider.id)
+            .filter(|key| !key.trim().is_empty())
         {
             provider.api_key = Some(RedactedSecret::new(key));
         }
@@ -183,7 +194,8 @@ pub fn save(config: &AppConfig) -> Result<()> {
         fs::create_dir_all(parent)
             .with_context(|| format!("failed to create config dir `{parent}`"))?;
     }
-    // `api_key` is `#[serde(skip)]`, so it is never written to the TOML file.
+    // `RedactedSecret` serializes as `[REDACTED]`, so the real key is never
+    // written to config.toml.
     let content = toml::to_string_pretty(config).context("failed to serialize config")?;
     fs::write(&path, content).with_context(|| format!("failed to write config to `{path}`"))
 }
@@ -353,33 +365,80 @@ fn validate_engine_name(
 // Secret handling
 // ---------------------------------------------------------------------------
 
-/// Sync api_key fields to credential storage.
-/// - `Some(RedactedSecret)` with value != "[REDACTED]" → save to credential storage
-/// - `None` → clear from credential storage
-/// - `Some(RedactedSecret)` with value == "[REDACTED]" → unchanged
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct ProviderSecrets {
+    #[serde(default)]
+    api_keys: BTreeMap<String, String>,
+}
+
+fn provider_secrets_path(data_path: &Utf8PathBuf) -> Utf8PathBuf {
+    data_path
+        .join(PROVIDER_SECRETS_DIR)
+        .join(PROVIDER_SECRETS_FILE)
+}
+
+fn load_provider_secrets(data_path: &Utf8PathBuf) -> Result<ProviderSecrets> {
+    let path = provider_secrets_path(data_path);
+    if !path.exists() {
+        return Ok(ProviderSecrets::default());
+    }
+    let content = fs::read_to_string(&path)
+        .with_context(|| format!("failed to read provider secrets `{path}`"))?;
+    toml::from_str(&content).with_context(|| format!("failed to parse provider secrets `{path}`"))
+}
+
+/// Sync api_key fields to the current data directory's local secrets file.
+/// The complete file is rewritten so removed providers and cleared keys do
+/// not linger. `[REDACTED]` is never persisted as a real key.
 pub fn sync_secrets(config: &AppConfig) -> Result<()> {
-    let secrets = SecretStore::new(SECRET_SERVICE);
+    let mut secrets = ProviderSecrets::default();
     for provider in &config.providers {
-        match &provider.api_key {
-            Some(secret) if secret.expose() != REDACTED => {
-                let key = provider_api_key_secret_key(&provider.id);
-                if secret.expose().trim().is_empty() {
-                    secrets.delete(&key)?;
-                } else {
-                    secrets.set(&key, secret.expose())?;
-                }
-            }
-            None => {
-                secrets.delete(&provider_api_key_secret_key(&provider.id))?;
-            }
-            _ => {} // "[REDACTED]" means unchanged
+        if let Some(secret) = &provider.api_key
+            && secret.expose() != REDACTED
+            && !secret.expose().trim().is_empty()
+        {
+            secrets
+                .api_keys
+                .insert(provider.id.clone(), secret.expose().to_string());
         }
     }
+
+    let path = provider_secrets_path(&config.data.path);
+    let parent = path
+        .parent()
+        .context("provider secrets path has no parent directory")?;
+    fs::create_dir_all(parent)
+        .with_context(|| format!("failed to create provider secrets dir `{parent}`"))?;
+    let content =
+        toml::to_string_pretty(&secrets).context("failed to serialize provider secrets")?;
+    AtomicFile::new(path.as_std_path(), OverwriteBehavior::AllowOverwrite)
+        .write(|file| {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                file.set_permissions(fs::Permissions::from_mode(0o600))?;
+            }
+            file.write_all(content.as_bytes())
+        })
+        .map_err(|error| match error {
+            atomicwrites::Error::Internal(error) | atomicwrites::Error::User(error) => error,
+        })
+        .with_context(|| format!("failed to write provider secrets `{path}`"))?;
+    restrict_secret_file_permissions(&path)?;
     Ok(())
 }
 
-fn provider_api_key_secret_key(provider_id: &str) -> String {
-    format!("{PROVIDER_API_KEY_SECRET_PREFIX}{provider_id}")
+#[cfg(unix)]
+fn restrict_secret_file_permissions(path: &Utf8PathBuf) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+        .with_context(|| format!("failed to secure provider secrets `{path}`"))
+}
+
+#[cfg(not(unix))]
+fn restrict_secret_file_permissions(_path: &Utf8PathBuf) -> Result<()> {
+    Ok(())
 }
 
 #[cfg(test)]
@@ -427,11 +486,63 @@ mod tests {
     }
 
     #[test]
-    fn provider_api_key_secret_key_preserves_legacy_keyring_user() {
+    fn provider_secrets_round_trip_outside_config_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let data_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+        let config = AppConfig {
+            data: DataConfig {
+                path: data_path.clone(),
+            },
+            providers: vec![ProviderConfig {
+                id: "openai".to_string(),
+                base_url: None,
+                api_key: Some(RedactedSecret::new("sk-local-test")),
+            }],
+            ..Default::default()
+        };
+
+        sync_secrets(&config).unwrap();
+        let saved = fs::read_to_string(provider_secrets_path(&data_path)).unwrap();
+        assert!(saved.contains("sk-local-test"));
         assert_eq!(
-            provider_api_key_secret_key("openai"),
-            "llm_provider_api_key_openai"
+            load_provider_secrets(&data_path)
+                .unwrap()
+                .api_keys
+                .get("openai")
+                .map(String::as_str),
+            Some("sk-local-test")
         );
+        let public_config = toml::to_string_pretty(&config).unwrap();
+        assert!(!public_config.contains("sk-local-test"));
+        assert!(public_config.contains(REDACTED));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn provider_secrets_file_is_user_only_on_unix() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let data_path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+        let config = AppConfig {
+            data: DataConfig {
+                path: data_path.clone(),
+            },
+            providers: vec![ProviderConfig {
+                id: "openai".to_string(),
+                base_url: None,
+                api_key: Some(RedactedSecret::new("secret")),
+            }],
+            ..Default::default()
+        };
+
+        sync_secrets(&config).unwrap();
+        let mode = fs::metadata(provider_secrets_path(&data_path))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600);
     }
 
     #[test]

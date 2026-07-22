@@ -9,6 +9,24 @@ import { useTranslation } from 'react-i18next'
 import { fitCanvasToViewport, resetCanvasScale } from '@/components/Canvas'
 import { SettingsDialog, type TabId } from '@/components/SettingsDialog'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import {
   Menubar,
   MenubarContent,
   MenubarItem,
@@ -35,6 +53,12 @@ import {
 import { formatShortcutForDisplay, getPlatform } from '@/lib/shortcutUtils'
 import { useEditorUiStore } from '@/lib/stores/editorUiStore'
 import { usePreferencesStore } from '@/lib/stores/preferencesStore'
+import {
+  applyProcessingProfile,
+  captureProcessingProfile,
+  type ProcessingProfile,
+  useProcessingProfileStore,
+} from '@/lib/stores/processingProfileStore'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
 
 const windowControls = {
@@ -63,26 +87,59 @@ type MenuItem = {
   testId?: string
 }
 
-type MenuSection = {
-  label: string
-  items: MenuItem[]
-  triggerTestId?: string
-}
-
 export function MenuBar() {
   const { t } = useTranslation()
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsTab, setSettingsTab] = useState<TabId>('appearance')
+  const [saveProfileOpen, setSaveProfileOpen] = useState(false)
+  const [profileName, setProfileName] = useState('')
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [applyingProfileId, setApplyingProfileId] = useState<string>()
+  const [profileToDelete, setProfileToDelete] = useState<ProcessingProfile>()
   const hasPage = useSelectionStore((s) => s.pageId !== null)
   const hasScene = useScene().scene !== null
   const shortcuts = usePreferencesStore((state) => state.shortcuts)
   const customPipeline = usePreferencesStore((state) => state.customPipeline)
   const setCustomPipeline = usePreferencesStore((state) => state.setCustomPipeline)
+  const profiles = useProcessingProfileStore((state) => state.profiles)
+  const activeProfileId = useProcessingProfileStore((state) => state.activeProfileId)
+  const addProfile = useProcessingProfileStore((state) => state.addProfile)
+  const deleteProfile = useProcessingProfileStore((state) => state.deleteProfile)
   const hasSelectedSteps = useMemo(
     () => Object.values(customPipeline).some(Boolean),
     [customPipeline],
   )
   const isMac = useMemo(() => getPlatform() === 'mac', [])
+  const normalizedProfileName = profileName.trim()
+  const duplicateProfileName = profiles.some(
+    (profile) => profile.name.toLocaleLowerCase() === normalizedProfileName.toLocaleLowerCase(),
+  )
+
+  const saveCurrentProfile = async () => {
+    if (!normalizedProfileName || duplicateProfileName || savingProfile) return
+    setSavingProfile(true)
+    try {
+      addProfile(await captureProcessingProfile(normalizedProfileName))
+      setProfileName('')
+      setSaveProfileOpen(false)
+    } catch (error) {
+      useEditorUiStore.getState().showError(String(error))
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  const applyProfile = async (profile: ProcessingProfile) => {
+    if (applyingProfileId) return
+    setApplyingProfileId(profile.id)
+    try {
+      await applyProcessingProfile(profile)
+    } catch (error) {
+      useEditorUiStore.getState().showError(String(error))
+    } finally {
+      setApplyingProfileId(undefined)
+    }
+  }
 
   const requirePageId = () => {
     const id = useSelectionStore.getState().pageId
@@ -414,6 +471,58 @@ export function MenuBar() {
             </MenubarSub>
           </MenubarContent>
         </MenubarMenu>
+        <MenubarMenu>
+          <MenubarTrigger
+            data-testid='menu-profiles-trigger'
+            className='rounded px-3 py-1.5 font-medium hover:bg-accent data-[state=open]:bg-accent'
+          >
+            {t('menu.profiles')}
+          </MenubarTrigger>
+          <MenubarContent className='min-w-52' align='start' sideOffset={5} alignOffset={-3}>
+            <MenubarItem
+              data-testid='menu-profile-save'
+              className='text-[13px]'
+              onSelect={() => setSaveProfileOpen(true)}
+            >
+              {t('menu.saveCurrentProfile')}
+            </MenubarItem>
+            {profiles.length > 0 ? <MenubarSeparator /> : null}
+            {profiles.map((profile) => (
+              <MenubarCheckboxItem
+                key={profile.id}
+                data-testid={`menu-profile-${profile.id}`}
+                className='text-[13px]'
+                checked={profile.id === activeProfileId}
+                disabled={applyingProfileId !== undefined}
+                onSelect={() => void applyProfile(profile)}
+              >
+                {profile.name}
+              </MenubarCheckboxItem>
+            ))}
+            {profiles.length > 0 ? (
+              <>
+                <MenubarSeparator />
+                <MenubarSub>
+                  <MenubarSubTrigger className='text-[13px]'>
+                    {t('menu.deleteProfile')}
+                  </MenubarSubTrigger>
+                  <MenubarSubContent className='min-w-44'>
+                    {profiles.map((profile) => (
+                      <MenubarItem
+                        key={profile.id}
+                        className='text-[13px]'
+                        variant='destructive'
+                        onSelect={() => setProfileToDelete(profile)}
+                      >
+                        {profile.name}
+                      </MenubarItem>
+                    ))}
+                  </MenubarSubContent>
+                </MenubarSub>
+              </>
+            ) : null}
+          </MenubarContent>
+        </MenubarMenu>
         <Link
           href={hasScene ? '/chapter-translation' : '#'}
           data-testid='menu-chapter-translation'
@@ -456,6 +565,71 @@ export function MenuBar() {
       <div data-tauri-drag-region className='flex h-full flex-1 items-center justify-center' />
       {isWindowsTauri && <WindowControls />}
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} defaultTab={settingsTab} />
+      <Dialog open={saveProfileOpen} onOpenChange={setSaveProfileOpen}>
+        <DialogContent>
+          <form
+            className='grid gap-4'
+            onSubmit={(event) => {
+              event.preventDefault()
+              void saveCurrentProfile()
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>{t('profiles.saveTitle')}</DialogTitle>
+              <DialogDescription>{t('profiles.saveDescription')}</DialogDescription>
+            </DialogHeader>
+            <div className='grid gap-2'>
+              <Input
+                data-testid='profile-name-input'
+                autoFocus
+                value={profileName}
+                placeholder={t('profiles.namePlaceholder')}
+                onChange={(event) => setProfileName(event.target.value)}
+              />
+              {duplicateProfileName ? (
+                <p className='text-sm text-destructive'>{t('profiles.duplicateName')}</p>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button type='button' variant='outline' onClick={() => setSaveProfileOpen(false)}>
+                {t('common.cancel')}
+              </Button>
+              <Button
+                data-testid='profile-save-confirm'
+                type='submit'
+                disabled={!normalizedProfileName || duplicateProfileName || savingProfile}
+              >
+                {t('common.save')}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog
+        open={profileToDelete !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setProfileToDelete(undefined)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogTitle>{t('profiles.deleteTitle')}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {t('profiles.deleteDescription', { name: profileToDelete?.name ?? '' })}
+          </AlertDialogDescription>
+          <div className='flex justify-end gap-2'>
+            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid='profile-delete-confirm'
+              onClick={() => {
+                if (profileToDelete) deleteProfile(profileToDelete.id)
+                setProfileToDelete(undefined)
+              }}
+            >
+              {t('common.delete')}
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -238,6 +238,6 @@ pub struct PipelineConfigPatch {
 pub struct ProviderPatch {
     pub id: String,
     pub base_url: Option<String>,
-    /// `"[REDACTED]"` → keep existing keyring secret; empty → clear; otherwise save.
+    /// `"[REDACTED]"` → keep existing local secret; empty → clear; otherwise save.
     pub api_key: Option<String>,
 }

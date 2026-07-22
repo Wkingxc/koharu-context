@@ -1,6 +1,6 @@
 //! Config routes. Apply via `koharu_app::config::apply_patch`, then persist
 //! (config.toml) and broadcast `ConfigChanged`. Provider secrets sync to the
-//! keyring via `sync_secrets`.
+//! current data directory's local secrets file via `sync_secrets`.
 
 use std::sync::Arc;
 
@@ -54,7 +54,7 @@ pub struct ProviderSecretRequest {
     pub secret: String,
 }
 
-/// Save (or overwrite) the keyring secret for a provider. Creates the
+/// Save (or overwrite) the local secret for a provider. Creates the
 /// provider entry in `config.providers` if it didn't exist. `PUT` because
 /// setting the secret is idempotent for the same body.
 #[utoipa::path(
@@ -77,7 +77,7 @@ async fn set_provider_secret(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Clear a provider's keyring secret. The provider entry itself is kept.
+/// Clear a provider's local secret. The provider entry itself is kept.
 #[utoipa::path(
     delete,
     path = "/config/providers/{id}/secret",

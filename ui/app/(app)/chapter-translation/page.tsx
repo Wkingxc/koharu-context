@@ -360,6 +360,16 @@ export default function ChapterTranslationPage() {
                     >
                       {t('chapterTranslation.retryBatch')}
                     </Button>
+                  ) : failed ? (
+                    <Button
+                      data-testid='chapter-return-after-failure'
+                      variant='outline'
+                      size='sm'
+                      className='self-end sm:self-auto'
+                      asChild
+                    >
+                      <Link href='/'>{t('chapterTranslation.fixInEditor')}</Link>
+                    </Button>
                   ) : null}
                 </div>
               ) : null}

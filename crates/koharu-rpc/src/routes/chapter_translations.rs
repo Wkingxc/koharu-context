@@ -646,18 +646,55 @@ async fn prepare_pages(
             bail!("page preparation failed before the translation API was called");
         }
     }
-    let not_ready = {
+    let missing_ocr = {
         let scene = session.scene.read();
-        scene
-            .pages
-            .values()
-            .filter(|page| !Artifact::OcrText.ready(page))
-            .count()
+        missing_ocr_details(&scene)
     };
-    if not_ready > 0 {
-        bail!("{not_ready} page(s) are still missing OCR output");
+    if !missing_ocr.is_empty() {
+        bail!(
+            "OCR output is still missing after preparation: {}",
+            missing_ocr.join("; ")
+        );
     }
     Ok(())
+}
+
+fn missing_ocr_details(scene: &koharu_core::Scene) -> Vec<String> {
+    scene
+        .pages
+        .values()
+        .enumerate()
+        .filter_map(|(page_index, page)| {
+            let missing_blocks = page
+                .nodes
+                .values()
+                .filter_map(|node| match &node.kind {
+                    koharu_core::NodeKind::Text(text) => Some(text),
+                    _ => None,
+                })
+                .enumerate()
+                .filter_map(|(text_index, text)| {
+                    (!text
+                        .text
+                        .as_ref()
+                        .is_some_and(|value| !value.trim().is_empty()))
+                    .then_some(text_index + 1)
+                })
+                .collect::<Vec<_>>();
+            (!missing_blocks.is_empty()).then(|| {
+                format!(
+                    "page {} \"{}\" (text blocks: {})",
+                    page_index + 1,
+                    page.name,
+                    missing_blocks
+                        .iter()
+                        .map(usize::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })
+        })
+        .collect()
 }
 
 fn missing_preparation_engines(
@@ -994,6 +1031,35 @@ mod tests {
         assert_eq!(
             missing_preparation_engines(&page, &stages),
             vec!["bubble".to_string(), "font".to_string(), "ocr".to_string()]
+        );
+    }
+
+    #[test]
+    fn missing_ocr_details_identifies_page_and_text_blocks_but_skips_empty_pages() {
+        let empty_page = Page::new("blank.png", 800, 1200);
+        let mut page = Page::new("page-002.png", 800, 1200);
+        for text in [Some("ready".to_string()), Some("  ".to_string()), None] {
+            let id = NodeId::new();
+            page.nodes.insert(
+                id,
+                Node {
+                    id,
+                    transform: Transform::default(),
+                    visible: true,
+                    kind: NodeKind::Text(TextData {
+                        text,
+                        ..Default::default()
+                    }),
+                },
+            );
+        }
+        let mut scene = Scene::default();
+        scene.pages.insert(empty_page.id, empty_page);
+        scene.pages.insert(page.id, page);
+
+        assert_eq!(
+            missing_ocr_details(&scene),
+            vec!["page 2 \"page-002.png\" (text blocks: 2, 3)".to_string()]
         );
     }
 
