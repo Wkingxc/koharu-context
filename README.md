@@ -1,6 +1,6 @@
 # Koharu Context
 
-这是基于 Koharu 的章节上下文翻译 Fork。本 README 只介绍本 Fork 新增的功能，以及如何在 Windows 上从零启动开发环境并编译出可直接运行的 `koharu.exe`。
+这是基于 Koharu 的章节上下文翻译 Fork。本 README 只介绍本 Fork 新增的功能，以及如何在 Windows 上从零启动开发环境并编译可直接运行的 `koharu.exe`。
 
 ## 本 Fork 的改动
 
@@ -36,16 +36,25 @@
 - 翻译完成后直接回到原编辑器精修；章节页不再重复提供“导出全部”。
 - 界面文案只维护简体中文和英文。
 
+### 处理配置与阅读体验
+
+- 顶栏“配置”菜单可以保存、应用、更新和删除处理配置；配置包含流水线引擎、当前 API 模型、目标语言、阅读顺序、字体与渲染样式、章节翻译参数等。
+- 全新安装内置“日漫”和“韩语”两套配置并默认选中“日漫”：日漫使用 Manga OCR，韩语配置使用 PaddleOCR-VL 1.6；已有用户配置不会被覆盖或重复追加。
+- 处理配置不保存 API Key、数据目录或 HTTP 参数。Provider API Key 保存在当前数据路径下的 `secrets/provider-api-keys.toml`，该文件已被 Git 忽略。
+- 章节翻译优先继承主页已经加载的 API LLM，进入章节页面后仍可单独切换模型。
+- 翻译完成后可在主页使用键盘 `←` / `→` 快速切换上一张和下一张图片；在输入框、下拉框或弹窗中操作时不会误触翻页。
+
 ## 使用流程
 
-1. 在原编辑器中导入一章漫画，并确认页面顺序。
-2. 点击顶栏“章节翻译”。
-3. 选择 API Provider、模型、目标语言，并按需填写作品背景与术语提示词。
-4. 选择整章一次翻译，或开启分批并设置每批页数。
-5. 开始任务，等待页面准备与 OCR 完成。
-6. 若使用分批模式，每批完成后检查当前摘要，修改后点击“继续下一批”。
-7. 全部完成后返回编辑器逐页精修。
-8. 在原编辑器中导出最终图片。
+1. 按漫画类型从顶栏“配置”菜单选择日漫、韩语或自己保存的配置。
+2. 在原编辑器中导入一章漫画，并确认页面顺序。
+3. 点击顶栏“章节翻译”。
+4. 选择 API Provider、模型、目标语言，并按需填写作品背景与术语提示词。
+5. 选择整章一次翻译，或开启分批并设置每批页数。
+6. 开始任务，等待页面准备与 OCR 完成。
+7. 若使用分批模式，每批完成后检查当前摘要，修改后点击“继续下一批”。
+8. 全部完成后返回编辑器逐页阅读和精修。
+9. 在原编辑器中导出最终图片。
 
 ## Windows 从零编译运行
 
@@ -142,19 +151,19 @@ bun run dev
 
 该命令会启动前端开发服务、Rust 后端和 Tauri 桌面窗口。首次 Rust 编译耗时较长属于正常现象。
 
-### 9. 编译 Release EXE
+### 9. 编译 Windows EXE
 
 ```powershell
 bun run build
 ```
 
-该命令会先构建前端，再以 Release 模式编译 Tauri 应用，并跳过安装包签名与打包。成功后可执行文件位于：
+该命令会先构建前端，再以 Release 模式编译可直接运行的 Windows 程序，不生成安装器。成功后程序位于：
 
 ```text
 target\release\koharu.exe
 ```
 
-直接启动：
+可以在资源管理器中双击 `koharu.exe`，或在 PowerShell 中启动：
 
 ```powershell
 .\target\release\koharu.exe
@@ -166,7 +175,24 @@ target\release\koharu.exe
 .\target\release\koharu.exe --cpu
 ```
 
-这里生成的是可直接执行的 EXE，不是安装器。换到另一台电脑运行时，仍需满足 WebView2、Microsoft Visual C++ Runtime 等系统运行依赖；模型和部分运行库会在首次使用相关功能时下载。
+换到另一台电脑运行时，仍需满足 WebView2、Microsoft Visual C++ Runtime 等系统运行依赖；模型和部分运行库会在首次使用相关功能时下载。
+
+### macOS 构建产物
+
+在满足 Rust、Bun 和 Xcode Command Line Tools 的 macOS 上执行：
+
+```bash
+bun install
+bun run build
+```
+
+默认只生成可由 Finder 直接启动的应用：
+
+```text
+target/release/bundle/macos/Koharu.app
+```
+
+本地产物未进行 Apple Developer ID 签名或公证；仅需裸二进制时可使用 `bun run build:binary`。
 
 ## Windows 常见问题
 

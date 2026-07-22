@@ -1,5 +1,6 @@
 {
   "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Koharu",
   "identifier": "Koharu",
   "build": {
     "beforeDevCommand": "bun --cwd ui dev",
@@ -36,10 +37,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "windows": {
-      "signCommand": "trusted-signing-cli -e https://eus.codesigning.azure.net -a Mayo -c Hawaii -d Koharu %1"
-    },
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": false
   },
   "plugins": {
     "updater": {

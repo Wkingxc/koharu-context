@@ -9,7 +9,7 @@ import {
   ScanTextIcon,
 } from 'lucide-react'
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -32,6 +32,7 @@ import {
   retryChapterTranslation,
   startChapterTranslation,
   useGetCatalog,
+  useGetCurrentLlm,
 } from '@/lib/api/default/default'
 import type { LlmTarget } from '@/lib/api/schemas'
 import { useChapterTranslationStore } from '@/lib/stores/chapterTranslationStore'
@@ -53,8 +54,14 @@ export default function ChapterTranslationPage() {
   const toggleFavoriteModel = usePreferencesStore((state) => state.toggleFavoriteModel)
   const [starting, setStarting] = useState(false)
   const [startError, setStartError] = useState<string>()
+  const editorTargetInheritanceResolved = useRef(false)
   const job = useJobsStore((state) => (form.operationId ? state.jobs[form.operationId] : undefined))
-  const { data: catalog } = useGetCatalog({ query: { staleTime: 30_000 } })
+  const { data: catalog, isFetched: catalogFetched } = useGetCatalog({
+    query: { staleTime: 30_000 },
+  })
+  const { data: currentLlm, isFetched: currentLlmFetched } = useGetCurrentLlm({
+    query: { staleTime: 30_000 },
+  })
 
   const providers = useMemo(
     () =>
@@ -77,28 +84,54 @@ export default function ChapterTranslationPage() {
   )?.model
 
   useEffect(() => {
-    const provider = selectedProvider ?? providers[0]
+    if (editorTargetInheritanceResolved.current || !catalogFetched || !currentLlmFetched) {
+      return
+    }
+    editorTargetInheritanceResolved.current = true
+
+    const editorTarget = currentLlm?.status === 'ready' ? currentLlm.target : undefined
+    if (editorTarget?.kind !== 'provider' || !editorTarget.providerId) return
+    const provider = providers.find((candidate) => candidate.id === editorTarget.providerId)
+    const model = provider?.models.find(
+      (candidate) => targetKey(candidate.target) === targetKey(editorTarget),
+    )
+    if (!provider || !model) return
+
+    const currentForm = useChapterTranslationStore.getState()
+    currentForm.setForm({
+      providerId: provider.id,
+      target: model.target,
+      targetLanguage: model.languages.includes(currentForm.targetLanguage)
+        ? currentForm.targetLanguage
+        : (model.languages[0] ?? 'zh-CN'),
+    })
+  }, [catalogFetched, currentLlm, currentLlmFetched, providers])
+
+  useEffect(() => {
+    const currentForm = useChapterTranslationStore.getState()
+    const provider =
+      providers.find((candidate) => candidate.id === currentForm.providerId) ?? providers[0]
     if (!provider) return
     const target =
       provider.models.find(
-        (model) => form.target && targetKey(model.target) === targetKey(form.target),
+        (model) => currentForm.target && targetKey(model.target) === targetKey(currentForm.target),
       )?.target ?? provider.models[0]?.target
     if (!target) return
     const model = provider.models.find(
       (candidate) => targetKey(candidate.target) === targetKey(target),
     )
-    const language = model?.languages.includes(form.targetLanguage)
-      ? form.targetLanguage
+    const language = model?.languages.includes(currentForm.targetLanguage)
+      ? currentForm.targetLanguage
       : (model?.languages[0] ?? 'zh-CN')
     if (
-      form.providerId !== provider.id ||
-      !form.target ||
-      targetKey(form.target) !== targetKey(target) ||
-      form.targetLanguage !== language
+      currentForm.providerId !== provider.id ||
+      !currentForm.target ||
+      targetKey(currentForm.target) !== targetKey(target) ||
+      currentForm.targetLanguage !== language
     ) {
-      form.setForm({ providerId: provider.id, target, targetLanguage: language })
+      currentForm.setForm({ providerId: provider.id, target, targetLanguage: language })
     }
-  }, [form, providers, selectedProvider])
+  }, [form, providers])
 
   if (!scene) {
     return (

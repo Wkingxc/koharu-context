@@ -33,6 +33,7 @@
     "processAll": "处理所有图片",
     "profiles": "配置",
     "saveCurrentProfile": "保存当前配置...",
+    "updateCurrentProfile": "更新当前配置",
     "deleteProfile": "删除配置",
     "chapterTranslation": "章节翻译",
     "help": "帮助",

@@ -2,7 +2,7 @@
 
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { LayoutGridIcon, Trash2Icon } from 'lucide-react'
-import { memo, useCallback, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { useTranslation } from 'react-i18next'
@@ -29,6 +29,22 @@ const THUMBNAIL_DPR =
 
 const ROW_HEIGHT = 230
 const OVERSCAN = 5
+const PAGE_NAVIGATION_BLOCKING_TARGETS = [
+  'input',
+  'textarea',
+  'select',
+  'button',
+  '[contenteditable]:not([contenteditable="false"])',
+  '[role="dialog"]',
+  '[role="menu"]',
+  '[role="menuitem"]',
+  '[role="listbox"]',
+  '[role="option"]',
+  '[role="slider"]',
+  '[role="spinbutton"]',
+  '[role="textbox"]',
+  '[role="combobox"]',
+].join(',')
 
 export function Navigator() {
   const { scene } = useScene()
@@ -45,6 +61,36 @@ export function Navigator() {
   const { t } = useTranslation()
   const [pageManagerOpen, setPageManagerOpen] = useState(false)
   const [pageToDeleteId, setPageToDeleteId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const handlePageNavigation = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      ) {
+        return
+      }
+
+      const target = event.target
+      if (target instanceof Element && target.closest(PAGE_NAVIGATION_BLOCKING_TARGETS)) {
+        return
+      }
+
+      if (currentIndex === -1 || totalPages <= 1) return
+
+      event.preventDefault()
+      const nextIndex = currentIndex + (event.key === 'ArrowRight' ? 1 : -1)
+      const nextPage = pages[nextIndex]
+      if (nextPage) setPage(nextPage.id)
+    }
+
+    window.addEventListener('keydown', handlePageNavigation)
+    return () => window.removeEventListener('keydown', handlePageNavigation)
+  }, [currentIndex, pages, setPage, totalPages])
 
   const pageToDeleteIndex = useMemo(() => {
     if (!pageToDeleteId) return -1

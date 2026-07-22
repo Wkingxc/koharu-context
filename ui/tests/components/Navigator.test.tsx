@@ -61,6 +61,36 @@ describe('Navigator', () => {
     expect(useSelectionStore.getState().pageId).toBe('a')
   })
 
+  it('uses unmodified arrow keys to change pages without hijacking editing controls', async () => {
+    server.use(
+      http.get('/api/v1/scene.json', () => HttpResponse.json(sceneWithPages(['a', 'b', 'c']))),
+    )
+    renderWithQuery(
+      <>
+        <Navigator />
+        <input aria-label='page name' />
+      </>,
+    )
+    await userEvent.click(await screen.findByTestId('navigator-page-1'))
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    expect(useSelectionStore.getState().pageId).toBe('c')
+
+    // The last page is a hard boundary rather than wrapping to the first page.
+    fireEvent.keyDown(window, { key: 'ArrowRight' })
+    expect(useSelectionStore.getState().pageId).toBe('c')
+
+    fireEvent.keyDown(window, { key: 'ArrowLeft' })
+    expect(useSelectionStore.getState().pageId).toBe('b')
+
+    const input = screen.getByRole('textbox', { name: 'page name' })
+    input.focus()
+    fireEvent.keyDown(input, { key: 'ArrowLeft' })
+    expect(useSelectionStore.getState().pageId).toBe('b')
+
+    fireEvent.keyDown(window, { key: 'ArrowLeft', ctrlKey: true })
+    expect(useSelectionStore.getState().pageId).toBe('b')
+  })
+
   it('exposes total page count via data attribute', async () => {
     server.use(http.get('/api/v1/scene.json', () => HttpResponse.json(sceneWithPages(['a', 'b']))))
     renderWithQuery(<Navigator />)

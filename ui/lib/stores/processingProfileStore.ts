@@ -51,24 +51,102 @@ type ProcessingProfileState = {
   profiles: ProcessingProfile[]
   activeProfileId?: string
   addProfile: (profile: ProcessingProfile) => void
+  updateProfile: (profile: ProcessingProfile) => void
   deleteProfile: (id: string) => void
   setActiveProfile: (id?: string) => void
 }
 
+const JAPANESE_MANGA_PROFILE_ID = 'builtin-japanese-manga'
+const CODEX_MANGA_PROMPT =
+  'Translate all visible text to natural English, remove the original lettering, and redraw the page as a clean manga image while preserving the artwork, panel layout, speech bubbles, tone, and composition.'
+
+function createMangaProfile({
+  id,
+  name,
+  ocr,
+}: {
+  id: string
+  name: string
+  ocr: string
+}): ProcessingProfile {
+  return {
+    id,
+    name,
+    createdAt: '2026-07-22T00:00:00.000Z',
+    pipeline: {
+      detector: 'comic-text-bubble-detector',
+      font_detector: 'yuzumarker-font-detection',
+      segmenter: 'comic-text-detector-seg',
+      bubble_segmenter: 'speech-bubble-segmentation',
+      ocr,
+      translator: 'llm',
+      inpainter: 'aot-inpainting',
+      renderer: 'koharu-renderer',
+    },
+    selectedTarget: {
+      kind: 'provider',
+      providerId: 'openai-compatible',
+      modelId: 'deepseek-v4-pro',
+    },
+    selectedLanguage: 'zh-CN',
+    readingOrder: 'rtl',
+    renderEffect: { italic: false, bold: false },
+    defaultFont: 'Noto Sans SC:500',
+    codexImagePrompt: CODEX_MANGA_PROMPT,
+    codexImageModel: 'gpt-5.5',
+    customPipeline: {
+      detect: true,
+      ocr: true,
+      translator: true,
+      inpainter: true,
+      renderer: true,
+    },
+    chapterTranslation: {
+      targetLanguage: 'zh-CN',
+      maxTokens: 32000,
+      brief: '',
+      batching: false,
+      batchSize: 50,
+    },
+  }
+}
+
+const createBuiltInProfiles = (): ProcessingProfile[] => [
+  createMangaProfile({
+    id: JAPANESE_MANGA_PROFILE_ID,
+    name: '日漫',
+    ocr: 'manga-ocr',
+  }),
+  createMangaProfile({
+    id: 'builtin-korean-manga',
+    name: '韩语',
+    ocr: 'paddle-ocr-vl-1.6',
+  }),
+]
+
 export const useProcessingProfileStore = create<ProcessingProfileState>()(
   persist(
-    (set) => ({
-      profiles: [],
-      activeProfileId: undefined,
-      addProfile: (profile) =>
-        set((state) => ({ profiles: [...state.profiles, profile], activeProfileId: profile.id })),
-      deleteProfile: (id) =>
-        set((state) => ({
-          profiles: state.profiles.filter((profile) => profile.id !== id),
-          activeProfileId: state.activeProfileId === id ? undefined : state.activeProfileId,
-        })),
-      setActiveProfile: (activeProfileId) => set({ activeProfileId }),
-    }),
+    (set) => {
+      const profiles = createBuiltInProfiles()
+      return {
+        profiles,
+        activeProfileId: JAPANESE_MANGA_PROFILE_ID,
+        addProfile: (profile) =>
+          set((state) => ({ profiles: [...state.profiles, profile], activeProfileId: profile.id })),
+        updateProfile: (profile) =>
+          set((state) => ({
+            profiles: state.profiles.map((existing) =>
+              existing.id === profile.id ? profile : existing,
+            ),
+          })),
+        deleteProfile: (id) =>
+          set((state) => ({
+            profiles: state.profiles.filter((profile) => profile.id !== id),
+            activeProfileId: state.activeProfileId === id ? undefined : state.activeProfileId,
+          })),
+        setActiveProfile: (activeProfileId) => set({ activeProfileId }),
+      }
+    },
     {
       name: 'koharu-processing-profiles',
       version: 1,
@@ -115,6 +193,22 @@ export async function captureProcessingProfile(name: string): Promise<Processing
       batchSize: chapter.batchSize,
     },
   }
+}
+
+export async function updateActiveProcessingProfile(): Promise<ProcessingProfile | undefined> {
+  const state = useProcessingProfileStore.getState()
+  const active = state.profiles.find((profile) => profile.id === state.activeProfileId)
+  if (!active) return undefined
+
+  const current = await captureProcessingProfile(active.name)
+  const updated = {
+    ...current,
+    id: active.id,
+    name: active.name,
+    createdAt: active.createdAt,
+  }
+  useProcessingProfileStore.getState().updateProfile(updated)
+  return updated
 }
 
 export async function applyProcessingProfile(profile: ProcessingProfile): Promise<void> {

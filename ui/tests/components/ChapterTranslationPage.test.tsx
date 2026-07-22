@@ -43,6 +43,7 @@ beforeEach(() => {
   queryClient.setQueryData(getGetSceneJsonQueryKey(), sceneSnapshot)
   server.use(
     http.get('/api/v1/scene.json', () => HttpResponse.json(sceneSnapshot)),
+    http.get('/api/v1/llm/current', () => HttpResponse.json({ status: 'idle' })),
     http.get('/api/v1/llm/catalog', () =>
       HttpResponse.json({
         localModels: [],
@@ -123,6 +124,26 @@ describe('ChapterTranslationPage', () => {
     })
     expect(await screen.findByText('chapterTranslation.runningTitle')).toBeInTheDocument()
     expect(requests).toHaveLength(1)
+  })
+
+  it('inherits the loaded editor API model once and still allows a manual chapter override', async () => {
+    server.use(
+      http.get('/api/v1/llm/current', () =>
+        HttpResponse.json({
+          status: 'ready',
+          target: { kind: 'provider', providerId: 'openai', modelId: 'gpt-pro' },
+        }),
+      ),
+    )
+
+    renderWithQuery(<ChapterTranslationPage />)
+    const trigger = await screen.findByTestId('chapter-model')
+    await waitFor(() => expect(trigger).toHaveTextContent('GPT Pro'))
+    expect(screen.getByTestId('chapter-provider')).toHaveValue('openai')
+
+    await userEvent.click(trigger)
+    await userEvent.click(await screen.findByTitle('GPT Test'))
+    await waitFor(() => expect(trigger).toHaveTextContent('GPT Test'))
   })
 
   it('favorites a model without selecting it and keeps favorites at the top', async () => {

@@ -156,9 +156,13 @@ pub async fn run() -> Result<()> {
                 .iter()
                 .find(|w| w.label == "main")
                 .expect("main window config not found");
-            tauri::webview::WebviewWindowBuilder::from_config(handle, wc)?
-                .build()?
-                .navigate(url)?;
+            let window_builder = tauri::webview::WebviewWindowBuilder::from_config(handle, wc)?;
+            let window_builder = if let Some(icon) = handle.default_window_icon() {
+                window_builder.icon(icon.clone())?
+            } else {
+                window_builder
+            };
+            window_builder.build()?.navigate(url)?;
 
             Ok(())
         })

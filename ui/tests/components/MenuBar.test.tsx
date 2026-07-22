@@ -96,6 +96,20 @@ describe('MenuBar', () => {
     expect(useProcessingProfileStore.getState().profiles[0]?.pipeline.ocr).toBe('ocr-a')
   })
 
+  it('enables updating only when a processing profile is active', async () => {
+    renderWithQuery(<MenuBar />)
+    await userEvent.click(screen.getByTestId('menu-profiles-trigger'))
+    expect(await screen.findByTestId('menu-profile-update')).toHaveAttribute('data-disabled')
+
+    useProcessingProfileStore.setState({
+      profiles: [{ id: 'profile-1', name: '黑白漫画' } as never],
+      activeProfileId: 'profile-1',
+    })
+    await userEvent.keyboard('{Escape}')
+    await userEvent.click(screen.getByTestId('menu-profiles-trigger'))
+    expect(await screen.findByTestId('menu-profile-update')).not.toHaveAttribute('data-disabled')
+  })
+
   it('Close Project is disabled when no project is open', async () => {
     // Clear seeded cache + point /scene.json at the 400 response so useScene
     // resolves to null.

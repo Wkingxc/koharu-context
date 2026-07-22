@@ -57,6 +57,7 @@ import {
   applyProcessingProfile,
   captureProcessingProfile,
   type ProcessingProfile,
+  updateActiveProcessingProfile,
   useProcessingProfileStore,
 } from '@/lib/stores/processingProfileStore'
 import { useSelectionStore } from '@/lib/stores/selectionStore'
@@ -94,6 +95,7 @@ export function MenuBar() {
   const [saveProfileOpen, setSaveProfileOpen] = useState(false)
   const [profileName, setProfileName] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
+  const [updatingProfile, setUpdatingProfile] = useState(false)
   const [applyingProfileId, setApplyingProfileId] = useState<string>()
   const [profileToDelete, setProfileToDelete] = useState<ProcessingProfile>()
   const hasPage = useSelectionStore((s) => s.pageId !== null)
@@ -114,6 +116,7 @@ export function MenuBar() {
   const duplicateProfileName = profiles.some(
     (profile) => profile.name.toLocaleLowerCase() === normalizedProfileName.toLocaleLowerCase(),
   )
+  const activeProfile = profiles.find((profile) => profile.id === activeProfileId)
 
   const saveCurrentProfile = async () => {
     if (!normalizedProfileName || duplicateProfileName || savingProfile) return
@@ -138,6 +141,18 @@ export function MenuBar() {
       useEditorUiStore.getState().showError(String(error))
     } finally {
       setApplyingProfileId(undefined)
+    }
+  }
+
+  const updateCurrentProfile = async () => {
+    if (!activeProfile || updatingProfile) return
+    setUpdatingProfile(true)
+    try {
+      await updateActiveProcessingProfile()
+    } catch (error) {
+      useEditorUiStore.getState().showError(String(error))
+    } finally {
+      setUpdatingProfile(false)
     }
   }
 
@@ -485,6 +500,14 @@ export function MenuBar() {
               onSelect={() => setSaveProfileOpen(true)}
             >
               {t('menu.saveCurrentProfile')}
+            </MenubarItem>
+            <MenubarItem
+              data-testid='menu-profile-update'
+              className='text-[13px]'
+              disabled={!activeProfile || updatingProfile}
+              onSelect={() => void updateCurrentProfile()}
+            >
+              {t('menu.updateCurrentProfile')}
             </MenubarItem>
             {profiles.length > 0 ? <MenubarSeparator /> : null}
             {profiles.map((profile) => (

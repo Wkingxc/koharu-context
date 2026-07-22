@@ -86,13 +86,13 @@ pub struct PipelineConfig {
 impl Default for PipelineConfig {
     fn default() -> Self {
         Self {
-            detector: "pp-doclayout-v3".to_string(),
+            detector: "comic-text-bubble-detector".to_string(),
             font_detector: "yuzumarker-font-detection".to_string(),
             segmenter: "comic-text-detector-seg".to_string(),
             bubble_segmenter: "speech-bubble-segmentation".to_string(),
-            ocr: "paddle-ocr-vl-1.6".to_string(),
+            ocr: "manga-ocr".to_string(),
             translator: "llm".to_string(),
-            inpainter: "lama-manga".to_string(),
+            inpainter: "aot-inpainting".to_string(),
             renderer: "koharu-renderer".to_string(),
         }
     }
@@ -476,6 +476,37 @@ mod tests {
         assert_eq!(config.http.connect_timeout, 45);
         assert_eq!(config.http.read_timeout, 300);
         assert_eq!(config.http.max_retries, 3);
+    }
+
+    #[test]
+    fn pipeline_defaults_use_recommended_manga_engines_without_overwriting_saved_values() {
+        let defaults = PipelineConfig::default();
+        assert_eq!(defaults.detector, "comic-text-bubble-detector");
+        assert_eq!(defaults.font_detector, "yuzumarker-font-detection");
+        assert_eq!(defaults.segmenter, "comic-text-detector-seg");
+        assert_eq!(defaults.bubble_segmenter, "speech-bubble-segmentation");
+        assert_eq!(defaults.ocr, "manga-ocr");
+        assert_eq!(defaults.translator, "llm");
+        assert_eq!(defaults.inpainter, "aot-inpainting");
+        assert_eq!(defaults.renderer, "koharu-renderer");
+
+        let saved: AppConfig = toml::from_str(
+            r#"
+                [pipeline]
+                detector = "pp-doclayout-v3"
+                font_detector = "yuzumarker-font-detection"
+                segmenter = "comic-text-detector-seg"
+                bubble_segmenter = "speech-bubble-segmentation"
+                ocr = "paddle-ocr-vl-1.6"
+                translator = "llm"
+                inpainter = "lama-manga"
+                renderer = "koharu-renderer"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(saved.pipeline.detector, "pp-doclayout-v3");
+        assert_eq!(saved.pipeline.ocr, "paddle-ocr-vl-1.6");
+        assert_eq!(saved.pipeline.inpainter, "lama-manga");
     }
 
     #[test]
