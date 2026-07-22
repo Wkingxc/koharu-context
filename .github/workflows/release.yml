@@ -68,6 +68,7 @@ jobs:
       - name: Build and publish NSIS installer
         uses: tauri-apps/tauri-action@v0
         env:
+          CARGO_BUILD_JOBS: 1
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tauriScript: npx @tauri-apps/cli
