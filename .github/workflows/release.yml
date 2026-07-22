@@ -53,18 +53,6 @@ jobs:
           actual="$(sed -n '/\[workspace.package\]/,/^\[/s/^version = "\([^"]*\)"/\1/p' Cargo.toml)"
           test "$actual" = "$expected"
 
-      - name: Generate release notes
-        id: release_notes
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          {
-            echo 'release_body<<EOF'
-            bun git-cliff --current --strip all
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-
       - name: Build and publish NSIS installer
         uses: tauri-apps/tauri-action@v0
         env:
@@ -74,7 +62,10 @@ jobs:
           tauriScript: npx @tauri-apps/cli
           tagName: ${{ env.RELEASE_TAG }}
           releaseName: ${{ env.RELEASE_TAG }}
-          releaseBody: ${{ steps.release_notes.outputs.release_body }}
+          releaseBody: |
+            Windows x64 NSIS installer for `${{ env.RELEASE_TAG }}`.
+
+            Download the `x64-setup.exe` asset below and run it to install Koharu Context.
           releaseDraft: false
           prerelease: false
           args: --bundles nsis
