@@ -23,7 +23,6 @@
     "core:window:allow-internal-toggle-maximize",
     "opener:default",
     "process:default",
-    "updater:default",
     "dialog:default",
     "dialog:allow-open",
     "dialog:allow-save",

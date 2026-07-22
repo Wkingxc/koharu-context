@@ -131,7 +131,7 @@ async function updateConfig(next: UpdateConfigBody): Promise<AppConfig> {
   return (await patchConfig(appConfigToPatch(next))) as AppConfig
 }
 
-const GITHUB_REPO = 'mayocream/koharu'
+const GITHUB_REPO = 'Wkingxc/koharu-context'
 
 const TABS = [
   { id: 'appearance', icon: PaletteIcon, labelKey: 'settings.appearance' },
@@ -1324,9 +1324,9 @@ function AboutPane({
             <Button
               variant='link'
               size='xs'
-              onClick={() => void openExternalUrl('https://github.com/mayocream')}
+              onClick={() => void openExternalUrl('https://github.com/Wkingxc')}
             >
-              Mayo
+              Wkingxc
             </Button>
           </InfoRow>
           <InfoRow label={t('settings.aboutRepository')}>

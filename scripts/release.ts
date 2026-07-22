@@ -9,10 +9,11 @@ const root = path.resolve(__dirname, '..')
 const execOpts = { cwd: root, maxBuffer: 10 * 1024 * 1024 }
 
 async function main() {
-  let bumpedVersion = process.argv[2]?.trim()
+  const requestedVersion = process.argv[2]?.trim()
+  let bumpedVersion = requestedVersion?.replace(/^v/, '')
 
-  if (bumpedVersion) {
-    console.log(`Using provided version: ${bumpedVersion}`)
+  if (requestedVersion) {
+    console.log(`Using provided version: ${requestedVersion}`)
   } else {
     console.log('Calculating bumped version with git-cliff...')
     bumpedVersion = (
@@ -24,7 +25,10 @@ async function main() {
     throw new Error('git-cliff did not return a bumped version')
   }
 
+  const releaseTag = `v${bumpedVersion}`
+
   console.log(`Bumped version: ${bumpedVersion}`)
+  console.log(`Release tag: ${releaseTag}`)
 
   const cargoTomlPath = path.join(root, 'Cargo.toml')
   const cargoToml = await readFile(cargoTomlPath, 'utf8')
@@ -46,10 +50,10 @@ async function main() {
   console.log('Updated Cargo.lock')
 
   await exec('git add Cargo.toml Cargo.lock', execOpts)
-  await exec(`git commit -m "chore(release): ${bumpedVersion}"`, execOpts)
+  await exec(`git commit -m "chore(release): ${releaseTag}"`, execOpts)
   console.log('Created release commit')
 
-  await exec(`git tag ${bumpedVersion}`, execOpts)
+  await exec(`git tag ${releaseTag}`, execOpts)
   console.log('Created git tag')
 
   await exec(`bun git-cliff -o CHANGELOG.md`, execOpts)
@@ -59,10 +63,10 @@ async function main() {
   await exec(`git commit --amend --no-edit`, execOpts)
   console.log('Amended release commit with updated CHANGELOG.md')
 
-  await exec(`git tag -f ${bumpedVersion}`, execOpts)
+  await exec(`git tag -f ${releaseTag}`, execOpts)
   console.log('Updated git tag to include CHANGELOG.md')
 
-  console.log(`Release commit and tag ${bumpedVersion} created.`)
+  console.log(`Release commit and tag ${releaseTag} created.`)
 }
 
 main().catch((error) => {

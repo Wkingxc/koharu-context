@@ -250,7 +250,7 @@ export function MenuBar() {
     { label: t('menu.discord'), onSelect: () => openExternalUrl('https://discord.gg/mHvHkxGnUY') },
     {
       label: t('menu.github'),
-      onSelect: () => openExternalUrl('https://github.com/mayocream/koharu'),
+      onSelect: () => openExternalUrl('https://github.com/Wkingxc/koharu-context'),
     },
   ]
 

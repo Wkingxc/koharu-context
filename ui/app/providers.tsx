@@ -7,7 +7,6 @@ import { I18nextProvider } from 'react-i18next'
 
 import ClientOnly from '@/components/ClientOnly'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { UpdaterProvider } from '@/components/Updater'
 import { connectEvents } from '@/lib/events'
 import i18n from '@/lib/i18n'
 import { queryClient } from '@/lib/queryClient'
@@ -31,9 +30,7 @@ export function Providers({ children }: { children: ReactNode }) {
       <ThemeProvider attribute='class' defaultTheme='system' enableSystem>
         <ClientOnly>
           <I18nextProvider i18n={i18n}>
-            <TooltipProvider delayDuration={0}>
-              <UpdaterProvider>{children}</UpdaterProvider>
-            </TooltipProvider>
+            <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
           </I18nextProvider>
         </ClientOnly>
       </ThemeProvider>

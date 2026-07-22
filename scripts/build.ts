@@ -4,6 +4,8 @@ export function tauriBuildArgs(platform = os.type()) {
   const args = ['run', 'scripts/dev.ts', 'tauri', 'build']
   if (platform === 'Darwin') {
     args.push('--bundles', 'app')
+  } else if (platform === 'Windows_NT') {
+    args.push('--bundles', 'nsis')
   } else {
     args.push('--no-bundle')
   }

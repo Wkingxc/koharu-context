@@ -56,7 +56,19 @@
 8. 全部完成后返回编辑器逐页阅读和精修。
 9. 在原编辑器中导出最终图片。
 
-## Windows 从零编译运行
+## Windows 下载安装
+
+普通用户无需安装 Git、Rust、Bun、Visual Studio 或 CUDA Toolkit。打开项目的 [GitHub Releases](https://github.com/Wkingxc/koharu-context/releases) 页面，下载最新版本的：
+
+```text
+Koharu_版本号_x64-setup.exe
+```
+
+双击安装器并按提示完成安装。由于当前安装器尚未进行商业代码签名，Windows SmartScreen 可能显示保护提示；确认文件来自本仓库后，可点击“更多信息”→“仍要运行”。
+
+应用和界面可在安装后直接启动。模型与部分 GPU 运行库会在首次使用对应引擎时下载，因此首次处理漫画需要保持网络连接；没有兼容 NVIDIA GPU 时会自动回退到 CPU。后续版本目前需要从 Releases 页面手动下载安装，新版本会沿用原有数据目录和配置。
+
+## Windows 从零编译运行（开发者）
 
 以下步骤以 Windows 10/11 x64、PowerShell 为例。当前仓库的 Windows 桌面构建默认启用 CUDA，因此即使之后使用 `--cpu` 运行，编译阶段仍需要能找到 `nvcc`。
 
@@ -151,27 +163,28 @@ bun run dev
 
 该命令会启动前端开发服务、Rust 后端和 Tauri 桌面窗口。首次 Rust 编译耗时较长属于正常现象。
 
-### 9. 编译 Windows EXE
+### 9. 编译 Windows NSIS 安装器
 
 ```powershell
 bun run build
 ```
 
-该命令会先构建前端，再以 Release 模式编译可直接运行的 Windows 程序，不生成安装器。成功后程序位于：
+该命令会先构建前端，再以 Release 模式编译 NSIS 安装器。成功后安装包位于：
 
 ```text
-target\release\koharu.exe
+target\release\bundle\nsis\Koharu_版本号_x64-setup.exe
 ```
 
-可以在资源管理器中双击 `koharu.exe`，或在 PowerShell 中启动：
+只需要裸 EXE 进行开发调试时执行：
+
+```powershell
+bun run build:binary
+```
+
+裸程序位于 `target\release\koharu.exe`，可以直接启动或强制使用 CPU：
 
 ```powershell
 .\target\release\koharu.exe
-```
-
-强制使用 CPU：
-
-```powershell
 .\target\release\koharu.exe --cpu
 ```
 

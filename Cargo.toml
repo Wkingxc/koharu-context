@@ -17,8 +17,8 @@ authors = [
     "Wangchong Zhou <fffonion@gmail.com>",
 ]
 readme = "README.md"
-homepage = "https://koharu.rs"
-repository = "https://github.com/mayocream/koharu"
+homepage = "https://github.com/Wkingxc/koharu-context"
+repository = "https://github.com/Wkingxc/koharu-context"
 keywords = ["manga", "ocr", "translation", "deep_learning", "computer_vision"]
 publish = false
 
@@ -61,7 +61,6 @@ tauri-build = "2.6"
 tauri-plugin-dialog = "2.7"
 tauri-plugin-fs = "2.5"
 tauri-plugin-opener = "2.5"
-tauri-plugin-updater = "2.10"
 blake3 = "1.8"
 rayon = "1.12"
 # disables `esaxx_fast` feature which is conflicting with `ort`
